@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Repository
+
+GitHub: https://github.com/alienex-bit/HoneyJar
+
 ## Build Commands
 
 All commands run from `android/` using PowerShell on Windows:
@@ -50,7 +54,8 @@ The `docs/` folder contains important context:
 - `ui/viewmodels/` — `MainViewModel` (shared across all screens via `MainActivity`)
 - `ui/theme/` — `Theme.kt` defines `HoneyJarTheme`, `HoneyJarColors`, `LocalHoneyJarColors`
 - `ui/components/` — `GlassCard`, `ContextualActionsSheet`
-- `utils/` — `NotificationCategories` (category string constants), `TimeUtils`
+- `utils/` — `BackupManager`, `AppIconCache`, `AppLabelCache`, `ColorUtils`, `NotificationCategories`, `NotificationConstants`, `TimeUtils`
+- `workers/` — `AutoBackupWorker` (WorkManager periodic/one-off backup jobs)
 
 ## Data Flow
 
@@ -70,7 +75,9 @@ The `docs/` folder contains important context:
 
 Four themes: `DarkHoney`, `Midnight`, `LightCream`, `LightMinimal` (enum `HoneyJarThemeType`).
 
-Screens access theme-specific tokens via `LocalHoneyJarColors.current` (`HoneyJarColors` — not `MaterialTheme.colorScheme`). Both must be used: `MaterialTheme.colorScheme.primary` for standard M3 slots, `LocalHoneyJarColors.current.accent` / `.textPrimary` / `.glassBorder` / `.heroGradient` etc. for custom tokens.
+Screens access theme-specific tokens via `LocalHoneyJarColors.current` (`HoneyJarColors` — not `MaterialTheme.colorScheme`). Both must be used: `MaterialTheme.colorScheme.primary` for standard M3 slots, `LocalHoneyJarColors.current.accent` / `.textPrimary` / `.glassBorder` / `.heroGradient` / `.heatmapRamp` etc. for custom tokens.
+
+`HoneyJarColors` tokens: `accent`, `accentGlow`, `heroGradient`, `glassBorder`, `textPrimary`, `textSecondary`, `itemBg`, `heatmapRamp`. The `heatmapRamp` is a `List<Color>` of 5 steps (empty → low → mid → high → max) defined per theme — do not compute heatmap colours dynamically from `MaterialTheme.colorScheme`.
 
 Typography: `PlayfairDisplay` (italic branding/headers) and `Outfit` (all UI text). Both are defined as `FontFamily` vals in `Theme.kt`.
 
@@ -86,13 +93,17 @@ History accepts an optional `?filter={filter}` nav argument for deep-linking to 
 
 Category string keys (stored in `PriorityGroupEntity.key` and `HoneyNotification.priority`) must be lowercase and match the constants in `NotificationCategories`. The DB is seeded with defaults on first create via `DatabaseCallback.onCreate`.
 
+## Backup
+
+`BackupManager` (in `utils/`) exports a versioned JSON file containing all notifications, priority groups, stats, settings, and theme. Restore uses `IGNORE` for notifications (never overwrites existing) and `REPLACE` for groups and stats.
+
+`AutoBackupWorker` (in `workers/`) runs via WorkManager on a user-selected schedule (off / daily / weekly / monthly). A one-off backup also fires immediately when the user selects a frequency pill. No battery or network constraints are applied — backup always runs when scheduled.
+
+Android system backup (`backup_rules.xml`, `data_extraction_rules.xml`) also covers all SharedPreferences and the Room database via Google cloud backup and device-to-device transfer.
+
 ## Known Unimplemented Areas
 
 The following features exist in the UI but are stubs (see `docs/HoneyJar_Unimplemented_Features.md` for details):
-- **StatsScreen** — all metrics are hardcoded strings; chart heights are random on every recomposition. Needs wiring to `MainViewModel.totalCount`, `actionedCount`, `dismissedCount`, and `allStats`.
-- **Encryption** — `HoneyEncryptor` (AES-GCM via Android Keystore) is instantiated in `NotificationRepository` but the `encrypt()`/`decrypt()` path in `toEntity()`/`toModel()` requires the `iv` and `encryptedData` fields to be non-null. Currently, most stored notifications have null IV and are stored as plaintext.
-- **Contextual actions** — `ContextualActionsSheet` presents mute, archive, snooze, unsubscribe, etc. Only `resolve` and `reply` are handled; all others are silent no-ops.
-- **Focus Mode** — persists to DataStore but is never read by any filter.
+- **StatsScreen metrics** — total/actioned/dismissed counts and bar chart heights are hardcoded/random. The activity heatmap is wired to real data. Needs wiring to `MainViewModel.totalCount`, `actionedCount`, `dismissedCount`, and `allStats`.
 - **Search** — `onClick = { /* Search */ }` on the search icon in HomeScreen.
 - **Pro purchase** — no `BillingClient` integration; the buy button calls `onFinished()`.
-- **Timestamps in HistoryScreen** — `postTime` is captured but every card shows hardcoded "Now".

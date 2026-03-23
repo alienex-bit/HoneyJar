@@ -7,12 +7,15 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.os.BatteryManager
-import android.content.Intent
-import android.content.IntentFilter
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.work.*
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ForegroundInfo
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
 import com.honeyjar.app.data.database.HoneyJarDatabase
 import com.honeyjar.app.repositories.SettingsRepository
 import com.honeyjar.app.utils.BackupManager
@@ -27,19 +30,6 @@ class AutoBackupWorker(
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
-        // 30% Battery Guard
-        val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { filter ->
-            context.registerReceiver(null, filter)
-        }
-        val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-        val pct = if (level != -1 && scale != -1) (level * 100 / scale.toFloat()) else 100f
-        
-        if (pct < 30) {
-            Log.w("AutoBackupWorker", "Battery too low for backup: ${pct.toInt()}% (Threshold: 30%)")
-            return Result.retry()
-        }
-
         return try {
             // Use standard background execution for now to avoid foreground service crashes
             // setForeground(getForegroundInfo()) 
@@ -150,12 +140,6 @@ class AutoBackupWorker(
             }
 
             val request = PeriodicWorkRequestBuilder<AutoBackupWorker>(interval, unit)
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-                        .setRequiresBatteryNotLow(true)
-                        .build()
-                )
                 .build()
 
             workManager.enqueueUniquePeriodicWork(

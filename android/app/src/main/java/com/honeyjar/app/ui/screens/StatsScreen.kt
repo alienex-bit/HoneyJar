@@ -371,25 +371,9 @@ fun CategoryBreakdown(categoryData: Map<String, Int>, priorityColors: Map<String
 @Composable
 fun Heatmap(heatmapData: Array<IntArray>) {
     val colors = LocalHoneyJarColors.current
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
     val maxCount = heatmapData.flatMap { it.toList() }.maxOrNull()?.coerceAtLeast(1) ?: 1
     val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
-
-    // Use whichever of primary/secondary is darker as the max intensity colour
-    // (LightMinimal has a lighter secondary, so primary is the richer end there)
-    fun Color.brightness() = red * 0.299f + green * 0.587f + blue * 0.114f
-    val rampMax = if (primary.brightness() <= secondary.brightness()) primary else secondary
-    val rampBase = if (rampMax == primary) secondary else primary
-
-    // Discrete heat ramp: empty → pale → light → mid → rich dark
-    val heatRamp = listOf(
-        colors.itemBg,
-        rampBase.copy(alpha = 0.18f),
-        rampBase.copy(alpha = 0.50f),
-        rampMax.copy(alpha = 0.75f),
-        rampMax
-    )
+    val heatRamp = colors.heatmapRamp
 
     GlassCard(Modifier.fillMaxWidth().wrapContentHeight()) {
         Column(Modifier.padding(16.dp)) {

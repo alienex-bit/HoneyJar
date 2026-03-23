@@ -37,7 +37,8 @@ data class HoneyJarColors(
     val glassBorder: Color,
     val textPrimary: Color,
     val textSecondary: Color,
-    val itemBg: Color
+    val itemBg: Color,
+    val heatmapRamp: List<Color>
 )
 
 val LocalHoneyJarColors = staticCompositionLocalOf {
@@ -48,7 +49,14 @@ val LocalHoneyJarColors = staticCompositionLocalOf {
         glassBorder = Color.White.copy(alpha = 0.1f),
         textPrimary = Color.White,
         textSecondary = Color(0xFFA0A0A0),
-        itemBg = Color.White.copy(alpha = 0.08f)
+        itemBg = Color.White.copy(alpha = 0.08f),
+        heatmapRamp = listOf(
+            Color.White.copy(alpha = 0.08f),
+            Color(0xFFFFB300).copy(alpha = 0.20f),
+            Color(0xFFFFB300).copy(alpha = 0.45f),
+            Color(0xFFFFB300).copy(alpha = 0.72f),
+            Color(0xFFFFB300)
+        )
     )
 }
 
@@ -122,7 +130,14 @@ fun HoneyJarTheme(
             glassBorder = Color.White.copy(alpha = 0.1f),
             textPrimary = Color.White,
             textSecondary = Color(0xFFA0A0A0),
-            itemBg = Color.White.copy(alpha = 0.08f)
+            itemBg = Color.White.copy(alpha = 0.08f),
+            heatmapRamp = listOf(
+                Color.White.copy(alpha = 0.08f),
+                Color(0xFFFFB300).copy(alpha = 0.20f),
+                Color(0xFFFFB300).copy(alpha = 0.45f),
+                Color(0xFFFFB300).copy(alpha = 0.72f),
+                Color(0xFFFFB300)
+            )
         )
         HoneyJarThemeType.Midnight -> HoneyJarColors(
             accent = Color(0xFF7C4DFF),
@@ -131,7 +146,14 @@ fun HoneyJarTheme(
             glassBorder = Color(0xFF7C4DFF).copy(alpha = 0.1f),
             textPrimary = Color.White,
             textSecondary = Color(0xFF9DA3AF),
-            itemBg = Color(0xFF7C4DFF).copy(alpha = 0.12f)
+            itemBg = Color(0xFF7C4DFF).copy(alpha = 0.12f),
+            heatmapRamp = listOf(
+                Color(0xFF7C4DFF).copy(alpha = 0.10f),
+                Color(0xFF7C4DFF).copy(alpha = 0.25f),
+                Color(0xFF7C4DFF).copy(alpha = 0.50f),
+                Color(0xFF7C4DFF).copy(alpha = 0.78f),
+                Color(0xFF7C4DFF)
+            )
         )
         HoneyJarThemeType.LightCream -> HoneyJarColors(
             accent = Color(0xFFD49A00),
@@ -140,7 +162,14 @@ fun HoneyJarTheme(
             glassBorder = Color.Black.copy(alpha = 0.05f),
             textPrimary = Color(0xFF1A1A1A),
             textSecondary = Color(0xFF6B635A),
-            itemBg = Color(0xFFF5F0E8)
+            itemBg = Color(0xFFF5F0E8),
+            heatmapRamp = listOf(
+                Color(0xFFEDE8DF),
+                Color(0xFFFFE082),
+                Color(0xFFFFCA28),
+                Color(0xFFD49A00),
+                Color(0xFFA67C00)
+            )
         )
         HoneyJarThemeType.LightMinimal -> HoneyJarColors(
             accent = Color(0xFF0076FF),
@@ -149,7 +178,14 @@ fun HoneyJarTheme(
             glassBorder = Color.Black.copy(alpha = 0.04f),
             textPrimary = Color(0xFF1C1E21),
             textSecondary = Color(0xFF65676B),
-            itemBg = Color(0xFFF0F2F5)
+            itemBg = Color(0xFFF0F2F5),
+            heatmapRamp = listOf(
+                Color(0xFFE8EDF2),
+                Color(0xFFBBDEFB),
+                Color(0xFF64B5F6),
+                Color(0xFF1E88E5),
+                Color(0xFF0076FF)
+            )
         )
     }
 

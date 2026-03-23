@@ -36,6 +36,7 @@ object BackupManager {
             put("isProEnabled", SettingsRepository.isProEnabled(context).first())
             put("autoBackupFrequency", SettingsRepository.getAutoBackupFrequency(context).first())
             put("hasCompletedOnboarding", SettingsRepository.hasCompletedOnboardingIntro(context).first())
+            put("lastAutoBackupTime", SettingsRepository.getLastAutoBackupTime(context).first())
         }
 
         val groupsArray = JSONArray().apply {
@@ -60,6 +61,7 @@ object BackupManager {
                     put("postTime", n.postTime)
                     put("priority", n.priority)
                     put("isResolved", n.isResolved)
+                    put("isGrouped", n.isGrouped)
                     put("snoozeUntil", n.snoozeUntil)
                     put("resolvedAt", n.resolvedAt)
                     put("systemActionsJson", if (n.systemActions.isNotEmpty()) org.json.JSONArray(n.systemActions).toString() else JSONObject.NULL)
@@ -110,6 +112,7 @@ object BackupManager {
         if (s.optBoolean("hasCompletedOnboarding", false)) {
             SettingsRepository.setHasCompletedOnboardingIntro(context, true)
         }
+        SettingsRepository.setLastAutoBackupTime(context, s.optLong("lastAutoBackupTime", 0L))
 
         // Theme
         val themeName = root.optString("theme", HoneyJarThemeType.DarkHoney.name)
@@ -141,6 +144,7 @@ object BackupManager {
                 postTime = n.getLong("postTime"),
                 priority = n.getString("priority"),
                 isResolved = n.optBoolean("isResolved", false),
+                isGrouped = n.optBoolean("isGrouped", false),
                 snoozeUntil = n.optLong("snoozeUntil", 0L),
                 resolvedAt = n.optLong("resolvedAt", 0L),
                 systemActionsJson = if (n.isNull("systemActionsJson")) null else n.getString("systemActionsJson")
