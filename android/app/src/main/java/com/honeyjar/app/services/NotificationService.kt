@@ -7,6 +7,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -15,11 +18,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.honeyjar.app.MainActivity
 import com.honeyjar.app.R
+import com.honeyjar.app.data.database.HoneyJarDatabase
+import com.honeyjar.app.data.entities.PriorityGroupEntity
 import com.honeyjar.app.models.HoneyNotification
 import com.honeyjar.app.repositories.NotificationRepository
-import com.honeyjar.app.data.database.HoneyJarDatabase
-import com.honeyjar.app.utils.NotificationCategories
 import com.honeyjar.app.repositories.SettingsRepository
+import com.honeyjar.app.utils.NotificationCategories
 import com.honeyjar.app.utils.TimeUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -33,7 +37,13 @@ class NotificationService : NotificationListenerService() {
         private const val STATUS_CHANNEL_ID = "honeyjar_status"
         private const val STATUS_NOTIFICATION_ID = 1001
         private const val ACTION_MARK_ALL_READ = "com.honeyjar.app.ACTION_MARK_ALL_READ"
+        private const val ALERT_NOTIF_ID_BASE = 2000
     }
+
+    // In-memory cache of priority group sound/vibration settings
+    private var priorityGroupCache: Map<String, PriorityGroupEntity> = emptyMap()
+    // Tracks channel settings to avoid redundant recreations: key → (soundUri, vibPattern)
+    private val channelSettingsCache = mutableMapOf<String, Pair<String, String>>()
 
     private val markAllReadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -68,6 +78,17 @@ class NotificationService : NotificationListenerService() {
                 }
             } catch (e: Exception) {
                 Log.e("HoneyJar-Service", "isCaptureOngoing collector failed", e)
+            }
+        }
+
+        serviceScope.launch {
+            try {
+                HoneyJarDatabase.getDatabase(this@NotificationService)
+                    .priorityGroupDao().getAllPriorityGroups().collect { groups ->
+                        priorityGroupCache = groups.associateBy { it.key }
+                    }
+            } catch (e: Exception) {
+                Log.e("HoneyJar-Service", "priorityGroup collector failed", e)
             }
         }
 
@@ -178,6 +199,7 @@ class NotificationService : NotificationListenerService() {
             )
 
             NotificationRepository.addNotification(honeyNotif)
+            postAlertIfNeeded(priority, title, text)
             Log.d("HoneyJar-Alerts", "Captured and Stored successfully!")
         } catch (e: Exception) {
             Log.e("HoneyJar-Service", "Failed to process notification from ${sbn.packageName}", e)
@@ -216,6 +238,74 @@ class NotificationService : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         sbn?.let { Log.d("HoneyJar-Alerts", "Notification dismissed: ${it.packageName}") }
+    }
+
+    private fun postAlertIfNeeded(categoryKey: String, title: String, text: String) {
+        val group = priorityGroupCache[categoryKey] ?: return
+        if (group.soundUri == "off" && group.vibrationPattern == "off") return
+        val channelId = ensureAlertChannel(categoryKey, group.soundUri, group.vibrationPattern)
+        val alertId = ALERT_NOTIF_ID_BASE + (categoryKey.hashCode() and 0x7FFFFFFF)
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_status_bee)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        try {
+            getSystemService(NotificationManager::class.java).notify(alertId, notification)
+        } catch (e: Exception) {
+            Log.w("HoneyJar-Alert", "Could not post alert for $categoryKey", e)
+        }
+    }
+
+    private fun ensureAlertChannel(categoryKey: String, soundUri: String, vibPattern: String): String {
+        val channelId = "honeyjar_alert_$categoryKey"
+        if (channelSettingsCache[categoryKey] == Pair(soundUri, vibPattern)) return channelId
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.deleteNotificationChannel(channelId)
+        val resolvedSound = resolveSoundUri(soundUri)
+        val resolvedVib = resolveVibrationPattern(vibPattern)
+        val channel = NotificationChannel(
+            channelId,
+            "${categoryKey.replaceFirstChar { it.uppercase() }} Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            if (resolvedSound != null) {
+                setSound(resolvedSound, AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build())
+            } else {
+                setSound(null, null)
+            }
+            if (resolvedVib != null) {
+                enableVibration(true)
+                vibrationPattern = resolvedVib
+            } else {
+                enableVibration(false)
+            }
+        }
+        nm.createNotificationChannel(channel)
+        channelSettingsCache[categoryKey] = Pair(soundUri, vibPattern)
+        return channelId
+    }
+
+    private fun resolveSoundUri(soundUri: String): Uri? = when (soundUri) {
+        "off" -> null
+        "default" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        "chime" -> Uri.parse("android.resource://$packageName/raw/sound_chime")
+        "alert" -> Uri.parse("android.resource://$packageName/raw/sound_alert")
+        else -> try { Uri.parse(soundUri) } catch (e: Exception) { null }
+    }
+
+    private fun resolveVibrationPattern(pattern: String): LongArray? = when (pattern) {
+        "off" -> null
+        "short" -> longArrayOf(0, 100)
+        "double" -> longArrayOf(0, 100, 100, 100)
+        "long" -> longArrayOf(0, 500)
+        "urgent" -> longArrayOf(0, 100, 50, 100, 50, 300)
+        else -> null
     }
 
     private fun createStatusChannel() {

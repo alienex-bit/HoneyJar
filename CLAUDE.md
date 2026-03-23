@@ -49,7 +49,7 @@ The `docs/` folder contains important context:
 - `services/` — `NotificationListenerService` (capture entry point)
 - `repositories/` — `NotificationRepository` (singleton object), `SettingsRepository`, `PriorityRepository`
 - `data/` — Room database, DAOs, entities, `HoneyEncryptor`, `ThemePrefs`
-- `models/` — `HoneyNotification` domain model
+- `models/` — `HoneyNotification` domain model, `AppGuiltEntry` (UI model for App Guilt Score)
 - `ui/screens/` — one file per screen (Home, History, Stats, Settings, Onboarding)
 - `ui/viewmodels/` — `MainViewModel` (shared across all screens via `MainActivity`)
 - `ui/theme/` — `Theme.kt` defines `HoneyJarTheme`, `HoneyJarColors`, `LocalHoneyJarColors`
@@ -89,9 +89,11 @@ History accepts an optional `?filter={filter}` nav argument for deep-linking to 
 
 ## Room Database
 
-`HoneyJarDatabase` version 5, entities: `NotificationEntity`, `NotificationStatsEntity`, `PriorityGroupEntity`. Migrations 3→4 and 4→5 are defined inline. `fallbackToDestructiveMigration()` is enabled — a missing migration drops the DB rather than crashing.
+`HoneyJarDatabase` version 7, entities: `NotificationEntity`, `NotificationStatsEntity`, `PriorityGroupEntity`. Migrations 3→4, 4→5, 5→6, 6→7 are defined inline. `fallbackToDestructiveMigration()` is enabled — a missing migration drops the DB rather than crashing.
 
 Category string keys (stored in `PriorityGroupEntity.key` and `HoneyNotification.priority`) must be lowercase and match the constants in `NotificationCategories`. The DB is seeded with defaults on first create via `DatabaseCallback.onCreate`.
+
+`PriorityGroupEntity` has `soundUri: String` ("off" | "default" | "chime" | "alert" | custom URI) and `vibrationPattern: String` ("off" | "short" | "double" | "long" | "urgent") — added in migration 6→7.
 
 ## Backup
 
@@ -100,6 +102,20 @@ Category string keys (stored in `PriorityGroupEntity.key` and `HoneyNotification
 `AutoBackupWorker` (in `workers/`) runs via WorkManager on a user-selected schedule (off / daily / weekly / monthly). A one-off backup also fires immediately when the user selects a frequency pill. No battery or network constraints are applied — backup always runs when scheduled.
 
 Android system backup (`backup_rules.xml`, `data_extraction_rules.xml`) also covers all SharedPreferences and the Room database via Google cloud backup and device-to-device transfer.
+
+## App Guilt Score
+
+A section in StatsScreen ranking the top 10 noisiest apps over the last 7 days. Computed entirely in-memory from the existing notifications flow via `MainViewModel.appBreakdown: StateFlow<List<AppGuiltEntry>>` — no separate DB table. Shows app icon (`AppIconCache`), app label (`AppLabelCache`), 7-day count chip, and a streak badge ("🔥 X days in a row") when an app has interrupted the user 3+ consecutive days.
+
+## Sound Profiles
+
+Per-priority-group sound and vibration alerts. When a notification is captured, `NotificationService` checks the group's `soundUri` and `vibrationPattern`. If either is non-"off", it posts a HoneyJar-owned secondary alert notification on a dedicated per-category channel (`honeyjar_alert_$categoryKey`).
+
+- **Sound options:** `off` / `default` / `chime` (bundled `res/raw/sound_chime.wav`) / `alert` (bundled `res/raw/sound_alert.wav`) / custom (device ringtone URI)
+- **Vibration presets:** `off` / `short` `[0,100]` / `double` `[0,100,100,100]` / `long` `[0,500]` / `urgent` `[0,100,50,100,50,300]`
+- Channels are created/recreated dynamically in `NotificationService` when settings change; settings cached in `channelSettingsCache` to avoid redundant recreation.
+- UI: bell icon in each priority group row in Settings opens `SoundProfileSheet` with pill selectors and a Test button.
+- `soundUri` and `vibrationPattern` are included in `BackupManager` export/restore.
 
 ## Known Unimplemented Areas
 

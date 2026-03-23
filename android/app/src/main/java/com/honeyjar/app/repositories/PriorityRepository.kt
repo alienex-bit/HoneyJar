@@ -30,4 +30,12 @@ class PriorityRepository(val dao: PriorityGroupDao) {
     suspend fun deleteByKey(key: String) {
         dao.deleteByKey(key)
     }
+
+    suspend fun updateSoundUri(key: String, uri: String) {
+        dao.updateSoundUri(key, uri)
+    }
+
+    suspend fun updateVibrationPattern(key: String, pattern: String) {
+        dao.updateVibrationPattern(key, pattern)
+    }
 }

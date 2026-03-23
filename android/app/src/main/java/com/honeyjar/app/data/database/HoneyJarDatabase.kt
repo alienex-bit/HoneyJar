@@ -15,7 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class], version = 6, exportSchema = false)
+@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class], version = 7, exportSchema = false)
 abstract class HoneyJarDatabase : RoomDatabase() {
     abstract fun priorityGroupDao(): PriorityGroupDao
     abstract fun notificationDao(): NotificationDao
@@ -61,6 +61,13 @@ abstract class HoneyJarDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE priority_groups ADD COLUMN soundUri TEXT NOT NULL DEFAULT 'off'")
+                db.execSQL("ALTER TABLE priority_groups ADD COLUMN vibrationPattern TEXT NOT NULL DEFAULT 'off'")
+            }
+        }
+
         @Volatile
         private var INSTANCE: HoneyJarDatabase? = null
 
@@ -72,7 +79,7 @@ abstract class HoneyJarDatabase : RoomDatabase() {
                     "honeyjar_database"
                 )
                 .addCallback(DatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

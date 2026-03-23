@@ -1,5 +1,6 @@
 package com.honeyjar.app.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -26,7 +28,9 @@ import com.honeyjar.app.ui.theme.LocalHoneyJarColors
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import java.util.*
+import com.honeyjar.app.utils.AppIconCache
 import com.honeyjar.app.utils.ColorUtils
+import com.honeyjar.app.ui.viewmodels.AppGuiltEntry
 
 @Composable
 fun StatsScreen(viewModel: MainViewModel) {
@@ -38,6 +42,7 @@ fun StatsScreen(viewModel: MainViewModel) {
     val heatmap by viewModel.heatmapData.collectAsState()
     val snoozedCount by viewModel.snoozedCount.collectAsState()
     val avgResponseMinutes by viewModel.avgResponseMinutes.collectAsState()
+    val appBreakdown by viewModel.appBreakdown.collectAsState()
 
     val actionRate = if (total > 0) (actioned * 100 / total) else 0
 
@@ -98,6 +103,14 @@ fun StatsScreen(viewModel: MainViewModel) {
             SectionHeader("Activity Heatmap")
             Spacer(Modifier.height(16.dp))
             Heatmap(heatmap)
+        }
+
+        if (appBreakdown.isNotEmpty()) {
+            item {
+                SectionHeader("App Guilt Score")
+                Spacer(Modifier.height(16.dp))
+                AppGuiltSection(appBreakdown)
+            }
         }
     }
 }
@@ -446,6 +459,65 @@ fun Heatmap(heatmapData: Array<IntArray>) {
                     Spacer(Modifier.width(4.dp))
                 }
                 Text("More", fontSize = 8.sp, color = colors.textSecondary.copy(0.4f))
+            }
+        }
+    }
+}
+
+@Composable
+fun AppGuiltSection(entries: List<AppGuiltEntry>) {
+    val context = LocalContext.current
+    val colors = LocalHoneyJarColors.current
+    GlassCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            entries.forEachIndexed { index, entry ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Rank number
+                    Text(
+                        "${index + 1}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textSecondary.copy(0.5f),
+                        modifier = Modifier.width(20.dp)
+                    )
+                    // App icon
+                    val icon = remember(entry.packageName) { AppIconCache.get(entry.packageName, context) }
+                    if (icon != null) {
+                        Image(
+                            bitmap = icon,
+                            contentDescription = entry.label,
+                            modifier = Modifier.size(28.dp).background(Color.Transparent, RoundedCornerShape(6.dp))
+                        )
+                    } else {
+                        Box(
+                            Modifier.size(28.dp).background(MaterialTheme.colorScheme.primary.copy(0.2f), RoundedCornerShape(6.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(entry.label.firstOrNull()?.uppercase() ?: "?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(entry.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary, fontFamily = Outfit)
+                        if (entry.streak >= 3) {
+                            Text("🔥 ${entry.streak} days in a row", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontFamily = Outfit)
+                        }
+                    }
+                    // Count chip
+                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary.copy(0.15f)) {
+                        Text(
+                            "${entry.count7Days}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            fontFamily = Outfit
+                        )
+                    }
+                }
+                if (index < entries.lastIndex) {
+                    Divider(color = colors.glassBorder, thickness = 0.5.dp)
+                }
             }
         }
     }

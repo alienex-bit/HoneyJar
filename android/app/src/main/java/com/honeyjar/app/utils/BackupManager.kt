@@ -47,6 +47,8 @@ object BackupManager {
                     put("colour", g.colour)
                     put("isEnabled", g.isEnabled)
                     put("position", g.position)
+                    put("soundUri", g.soundUri)
+                    put("vibrationPattern", g.vibrationPattern)
                 })
             }
         }
@@ -128,7 +130,9 @@ object BackupManager {
                 label = g.getString("label"),
                 colour = g.getString("colour"),
                 isEnabled = g.optBoolean("isEnabled", true),
-                position = g.optInt("position", i)
+                position = g.optInt("position", i),
+                soundUri = g.optString("soundUri", "off"),
+                vibrationPattern = g.optString("vibrationPattern", "off")
             ))
         }
 

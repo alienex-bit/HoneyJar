@@ -26,4 +26,10 @@ interface PriorityGroupDao {
 
     @Query("DELETE FROM priority_groups WHERE `key` = :key")
     suspend fun deleteByKey(key: String)
+
+    @Query("UPDATE priority_groups SET soundUri = :uri WHERE `key` = :key")
+    suspend fun updateSoundUri(key: String, uri: String)
+
+    @Query("UPDATE priority_groups SET vibrationPattern = :pattern WHERE `key` = :key")
+    suspend fun updateVibrationPattern(key: String, pattern: String)
 }

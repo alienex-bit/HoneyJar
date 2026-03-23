@@ -9,5 +9,7 @@ data class PriorityGroupEntity(
     val label: String,
     val colour: String,
     val isEnabled: Boolean = true,
-    val position: Int
+    val position: Int,
+    val soundUri: String = "off",         // "off" | "default" | "chime" | "alert" | custom URI
+    val vibrationPattern: String = "off"  // "off" | "short" | "double" | "long" | "urgent"
 )

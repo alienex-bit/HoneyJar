@@ -12,9 +12,17 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.honeyjar.app.data.dao.StatsDao
 import com.honeyjar.app.models.HoneyNotification
+import com.honeyjar.app.utils.AppLabelCache
 import com.honeyjar.app.utils.BackupManager
 import com.honeyjar.app.utils.TimeUtils
 import java.util.Calendar
+
+data class AppGuiltEntry(
+    val packageName: String,
+    val label: String,
+    val count7Days: Int,
+    val streak: Int  // consecutive days ending today with ≥1 notification
+)
 
 class MainViewModel(
     private val application: android.app.Application,
@@ -87,6 +95,33 @@ class MainViewModel(
         data
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Array(7) { IntArray(12) { 0 } })
 
+    // App Guilt Score: top 10 noisiest apps over the last 7 days with consecutive-day streaks
+    val appBreakdown: StateFlow<List<AppGuiltEntry>> = notificationsDebounced.map { all ->
+        val dayMs = 86_400_000L
+        val todayStart = TimeUtils.getDayStart(System.currentTimeMillis())
+        val weekAgo = todayStart - 6 * dayMs
+        val recent = all.filter { it.postTime >= weekAgo }
+        recent.groupBy { it.packageName }
+            .map { (pkg, notifs) ->
+                val count = notifs.size
+                var streak = 0
+                for (daysAgo in 0..365) {
+                    val dayStart = todayStart - daysAgo * dayMs
+                    if (all.any { it.packageName == pkg && it.postTime >= dayStart && it.postTime < dayStart + dayMs }) {
+                        streak++
+                    } else break
+                }
+                AppGuiltEntry(
+                    packageName = pkg,
+                    label = AppLabelCache.get(pkg, application),
+                    count7Days = count,
+                    streak = streak
+                )
+            }
+            .sortedByDescending { it.count7Days }
+            .take(10)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     // Response time stat (O(N) moved out of UI)
     val avgResponseMinutes: StateFlow<Long?> = notificationsDebounced.map { all ->
         all.filter { it.isResolved && it.resolvedAt > 0 && it.resolvedAt > it.postTime }
@@ -118,6 +153,14 @@ class MainViewModel(
         viewModelScope.launch {
             repository.insert(group)
         }
+    }
+
+    fun updateSoundUri(key: String, uri: String) {
+        viewModelScope.launch { repository.updateSoundUri(key, uri) }
+    }
+
+    fun updateVibrationPattern(key: String, pattern: String) {
+        viewModelScope.launch { repository.updateVibrationPattern(key, pattern) }
     }
 
     suspend fun buildBackupJson(context: Context): String =

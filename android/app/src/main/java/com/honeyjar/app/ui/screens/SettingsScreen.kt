@@ -1,10 +1,15 @@
 package com.honeyjar.app.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -68,7 +73,7 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
     val isProEnabled by SettingsRepository.isProEnabled(context).collectAsState(false)
 
     var showColorPickerFor by remember { mutableStateOf<PriorityGroupEntity?>(null) }
-
+    var showSoundProfileFor by remember { mutableStateOf<PriorityGroupEntity?>(null) }
     var showAddCustomGroup by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -151,6 +156,7 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
                                 group = group,
                                 isDeletable = !isSystemGroup,
                                 onColorClick = { showColorPickerFor = group },
+                                onSoundClick = { showSoundProfileFor = group },
                                 onEnabledChange = { viewModel.updatePriorityEnabled(group.key, it) },
                                 onDelete = { viewModel.deletePriorityGroup(group.key) }
                             )
@@ -179,11 +185,20 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
         showColorPickerFor?.let { group ->
             ColorPickerOverlay(
                 group = group,
-                onColorSelected = { hex -> 
+                onColorSelected = { hex ->
                     viewModel.updatePriorityColour(group.key, hex)
                     showColorPickerFor = null
                 },
                 onDismiss = { showColorPickerFor = null }
+            )
+        }
+
+        showSoundProfileFor?.let { group ->
+            SoundProfileSheet(
+                group = group,
+                onSoundSelected = { uri -> viewModel.updateSoundUri(group.key, uri) },
+                onVibrationSelected = { pattern -> viewModel.updateVibrationPattern(group.key, pattern) },
+                onDismiss = { showSoundProfileFor = null }
             )
         }
         
@@ -399,14 +414,16 @@ fun SettingsPill(label: String, isSelected: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun PriorityRow(
-    group: PriorityGroupEntity, 
+    group: PriorityGroupEntity,
     isDeletable: Boolean,
-    onColorClick: () -> Unit, 
+    onColorClick: () -> Unit,
+    onSoundClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
     val colors = LocalHoneyJarColors.current
     val groupColor = try { Color(android.graphics.Color.parseColor(group.colour)) } catch (e: Exception) { MaterialTheme.colorScheme.primary }
+    val soundActive = group.soundUri != "off" || group.vibrationPattern != "off"
     Row(
         modifier = Modifier.fillMaxWidth().clickable { onColorClick() }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -420,9 +437,7 @@ fun PriorityRow(
         )
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            // Name (13sp SemiBold)
             Text(group.label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
-            // Apps hint (11sp muted)
             val hint = when(group.key) {
                 "urgent" -> "Payment alerts, system warnings"
                 "messages" -> "WhatsApp, Slack, SMS"
@@ -435,7 +450,17 @@ fun PriorityRow(
             }
             Text(hint, fontSize = 11.sp, color = colors.textSecondary)
         }
-        
+
+        // Sound & vibration icon — lit up when active
+        IconButton(onClick = onSoundClick) {
+            Icon(
+                if (soundActive) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                contentDescription = "Sound profile",
+                tint = if (soundActive) MaterialTheme.colorScheme.primary else colors.textSecondary.copy(0.4f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
         if (isDeletable) {
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.textSecondary.copy(0.4f), modifier = Modifier.size(18.dp))
@@ -443,8 +468,8 @@ fun PriorityRow(
         }
 
         Switch(
-            checked = group.isEnabled, 
-            onCheckedChange = { onEnabledChange(it) }, 
+            checked = group.isEnabled,
+            onCheckedChange = { onEnabledChange(it) },
             colors = SwitchDefaults.colors(checkedTrackColor = groupColor)
         )
     }
@@ -707,6 +732,158 @@ fun BackupSection(viewModel: MainViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF22C55E), modifier = Modifier.size(14.dp))
                     Text("Last backup: $lastBackupText", fontSize = 12.sp, color = colors.textSecondary, fontFamily = Outfit)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SoundProfileSheet(
+    group: PriorityGroupEntity,
+    onSoundSelected: (String) -> Unit,
+    onVibrationSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val colors = LocalHoneyJarColors.current
+    val scope = rememberCoroutineScope()
+
+    var currentSound by remember { mutableStateOf(group.soundUri) }
+    var currentVibration by remember { mutableStateOf(group.vibrationPattern) }
+
+    val soundOptions = listOf("off" to "Off", "default" to "Default", "chime" to "Chime", "alert" to "Alert", "custom" to "Custom")
+    val vibOptions = listOf("off" to "Off", "short" to "Short", "double" to "Double", "long" to "Long", "urgent" to "Urgent")
+
+    val ringtoneLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            if (uri != null) {
+                currentSound = uri.toString()
+                onSoundSelected(uri.toString())
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.7f)).clickable { onDismiss() }, contentAlignment = Alignment.BottomCenter) {
+        GlassCard(modifier = Modifier.fillMaxWidth().wrapContentHeight().clickable(enabled = false) {}) {
+            Column(Modifier.padding(28.dp)) {
+                Text("Sound & Vibration", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = PlayfairDisplay, color = colors.textPrimary)
+                Text(group.label, fontSize = 14.sp, color = colors.textSecondary, fontFamily = Outfit)
+                Spacer(Modifier.height(24.dp))
+
+                // Sound row
+                Text("Sound", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary, fontFamily = Outfit)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    soundOptions.forEach { (key, label) ->
+                        val isSelected = if (key == "custom") currentSound !in listOf("off", "default", "chime", "alert") else currentSound == key
+                        Surface(
+                            onClick = {
+                                if (key == "custom") {
+                                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Alert Sound")
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                    }
+                                    ringtoneLauncher.launch(intent)
+                                } else {
+                                    currentSound = key
+                                    onSoundSelected(key)
+                                }
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(0.2f) else colors.itemBg,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else colors.textPrimary, fontFamily = Outfit)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // Vibration row
+                Text("Vibration", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary, fontFamily = Outfit)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    vibOptions.forEach { (key, label) ->
+                        val isSelected = currentVibration == key
+                        Surface(
+                            onClick = { currentVibration = key; onVibrationSelected(key) },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(0.2f) else colors.itemBg,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else colors.textPrimary, fontFamily = Outfit)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // Test button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            if (currentSound != "off") {
+                                try {
+                                    val uri = when (currentSound) {
+                                        "default" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                                        "chime" -> Uri.parse("android.resource://${context.packageName}/raw/sound_chime")
+                                        "alert" -> Uri.parse("android.resource://${context.packageName}/raw/sound_alert")
+                                        else -> Uri.parse(currentSound)
+                                    }
+                                    RingtoneManager.getRingtone(context, uri)?.play()
+                                } catch (_: Exception) {}
+                            }
+                            if (currentVibration != "off") {
+                                val pattern = when (currentVibration) {
+                                    "short" -> longArrayOf(0, 100)
+                                    "double" -> longArrayOf(0, 100, 100, 100)
+                                    "long" -> longArrayOf(0, 500)
+                                    "urgent" -> longArrayOf(0, 100, 50, 100, 50, 300)
+                                    else -> null
+                                }
+                                pattern?.let {
+                                    val v = context.getSystemService(Vibrator::class.java)
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        v?.vibrate(VibrationEffect.createWaveform(it, -1))
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        v?.vibrate(it, -1)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Test", fontWeight = FontWeight.Bold, fontFamily = Outfit)
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Button(
+                    onClick = { onDismiss() },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.glassBorder)
+                ) {
+                    Text("Done", fontWeight = FontWeight.Bold, fontFamily = Outfit)
                 }
             }
         }
