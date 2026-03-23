@@ -1,0 +1,52 @@
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Android Studio / IntelliJ IDEA
+*.iml
+.idea/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/modules.xml
+*.iws
+
+# Gradle cache and wrapper (keep gradlew scripts, ignore binaries)
+android/gradle/wrapper/gradle-wrapper.jar
+
+# Keystore and signing configs (never commit secrets)
+*.jks
+*.keystore
+keystore.properties
+release.properties
+
+# Internal docs
+docs/
+
+# Data backups (may contain personal notification data)
+*.json
+
+# Local build logs
+*.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# APKs and AABs
+*.apk
+*.aab
+
+# Generated Room schemas (regenerate from source)
+# Uncomment if you don't want to track schema exports:
+# android/app/schemas/

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Hexagon body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2 L20,6.5 L20,17.5 L12,22 L4,17.5 L4,6.5 Z" />
+    <!-- Bee stripes (cutout effect via dark color) -->
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.3"
+        android:pathData="M4,9.5 L20,9.5 L20,11.5 L4,11.5 Z" />
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.3"
+        android:pathData="M4,13.5 L20,13.5 L20,15.5 L4,15.5 Z" />
+    <!-- Wings -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.8"
+        android:pathData="M12,7 Q8,4 5,6 Q8,8 12,7 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.8"
+        android:pathData="M12,7 Q16,4 19,6 Q16,8 12,7 Z" />
+</vector>
