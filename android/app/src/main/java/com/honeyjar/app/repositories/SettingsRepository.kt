@@ -18,6 +18,7 @@ object SettingsRepository {
     private val HAS_COMPLETED_ONBOARDING_INTRO = booleanPreferencesKey("has_completed_onboarding_intro")
     private val AUTO_BACKUP_FREQUENCY = stringPreferencesKey("auto_backup_frequency") // "off", "daily", "weekly", "monthly"
     private val LAST_AUTO_BACKUP_TIME = longPreferencesKey("last_auto_backup_time")
+    private val SECONDARY_ALERTS_ENABLED = booleanPreferencesKey("secondary_alerts_enabled")
     fun isSmartGroupingEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[SMART_GROUPING] ?: true }
     fun isPriorityFilteringEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[PRIORITY_FILTERING] ?: true }
     fun isFocusModeEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[FOCUS_MODE] ?: false }
@@ -26,6 +27,7 @@ object SettingsRepository {
     fun hasCompletedOnboardingIntro(context: Context): Flow<Boolean> = context.dataStore.data.map { it[HAS_COMPLETED_ONBOARDING_INTRO] ?: false }
     fun getAutoBackupFrequency(context: Context): Flow<String> = context.dataStore.data.map { it[AUTO_BACKUP_FREQUENCY] ?: "off" }
     fun getLastAutoBackupTime(context: Context): Flow<Long> = context.dataStore.data.map { it[LAST_AUTO_BACKUP_TIME] ?: 0L }
+    fun isSecondaryAlertsEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[SECONDARY_ALERTS_ENABLED] ?: true }
 
     suspend fun setSmartGrouping(context: Context, enabled: Boolean) {
         context.dataStore.edit { it[SMART_GROUPING] = enabled }
@@ -57,5 +59,9 @@ object SettingsRepository {
 
     suspend fun setLastAutoBackupTime(context: Context, time: Long) {
         context.dataStore.edit { it[LAST_AUTO_BACKUP_TIME] = time }
+    }
+
+    suspend fun setSecondaryAlertsEnabled(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[SECONDARY_ALERTS_ENABLED] = enabled }
     }
 }

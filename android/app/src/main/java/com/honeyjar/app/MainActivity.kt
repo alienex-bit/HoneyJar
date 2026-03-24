@@ -73,10 +73,11 @@ class MainActivity : FragmentActivity() {
             // one-frame flash to the Onboarding screen on every cold start.
             if (hasCompletedOnboardingIntro == null) return@setContent
 
-            val startDestination = if (!hasCompletedOnboardingIntro!! || !areAllPermissionsGranted(this@MainActivity)) {
-                Screen.Onboarding.route
-            } else {
-                Screen.Home.route
+            val deepLinkRoute = intent?.getStringExtra("deepLink")
+            val startDestination = when {
+                !hasCompletedOnboardingIntro!! || !areAllPermissionsGranted(this@MainActivity) -> Screen.Onboarding.route
+                deepLinkRoute != null -> deepLinkRoute
+                else -> Screen.Home.route
             }
 
             val onboardingMode = if (hasCompletedOnboardingIntro!!) {

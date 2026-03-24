@@ -32,4 +32,16 @@ interface PriorityGroupDao {
 
     @Query("UPDATE priority_groups SET vibrationPattern = :pattern WHERE `key` = :key")
     suspend fun updateVibrationPattern(key: String, pattern: String)
+
+    @Query("SELECT * FROM priority_groups WHERE `key` = :key LIMIT 1")
+    suspend fun getByKey(key: String): PriorityGroupEntity?
+
+    @Query("UPDATE priority_groups SET secondaryAlertEnabled = :enabled WHERE `key` = :key")
+    suspend fun updateSecondaryAlertEnabled(key: String, enabled: Boolean)
+
+    @Query("UPDATE priority_groups SET initialAlertDelayMs = :delayMs WHERE `key` = :key")
+    suspend fun updateInitialAlertDelayMs(key: String, delayMs: Long)
+
+    @Query("UPDATE priority_groups SET secondaryAlertDelayMs = :delayMs WHERE `key` = :key")
+    suspend fun updateSecondaryAlertDelayMs(key: String, delayMs: Long)
 }

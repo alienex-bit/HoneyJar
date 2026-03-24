@@ -11,5 +11,8 @@ data class PriorityGroupEntity(
     val isEnabled: Boolean = true,
     val position: Int,
     val soundUri: String = "off",         // "off" | "default" | "chime" | "alert" | custom URI
-    val vibrationPattern: String = "off"  // "off" | "short" | "double" | "long" | "urgent"
+    val vibrationPattern: String = "off", // "off" | "short" | "double" | "long" | "urgent"
+    val secondaryAlertEnabled: Boolean = true,
+    val initialAlertDelayMs: Long = 300_000L,    // 5 min — delay before first alert after dismissal
+    val secondaryAlertDelayMs: Long = 1_800_000L // 30 min — repeat interval (0 = no repeat)
 )

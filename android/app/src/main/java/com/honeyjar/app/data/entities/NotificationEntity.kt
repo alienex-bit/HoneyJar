@@ -17,7 +17,10 @@ data class NotificationEntity(
     @ColumnInfo(typeAffinity = ColumnInfo.BLOB) val encryptedData: ByteArray? = null,
     val snoozeUntil: Long = 0,
     val resolvedAt: Long = 0,
-    val systemActionsJson: String? = null
+    val systemActionsJson: String? = null,
+    val isDismissedByUser: Boolean = false,
+    val dismissedAt: Long = 0L,
+    val alertFiredAt: Long = 0L
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

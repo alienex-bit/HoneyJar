@@ -71,6 +71,7 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
     val isFocusMode by SettingsRepository.isFocusModeEnabled(context).collectAsState(false)
     val isCaptureOngoing by SettingsRepository.isCaptureOngoingEnabled(context).collectAsState(false)
     val isProEnabled by SettingsRepository.isProEnabled(context).collectAsState(false)
+    val isSecondaryAlerts by viewModel.secondaryAlertsEnabled.collectAsState()
 
     var showColorPickerFor by remember { mutableStateOf<PriorityGroupEntity?>(null) }
     var showSoundProfileFor by remember { mutableStateOf<PriorityGroupEntity?>(null) }
@@ -125,6 +126,9 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
                         }
                         SettingsToggleItem(Icons.Default.NotificationsActive, "Capture ongoing alerts", "Calls, music, VPN, navigation & other persistent alerts", isCaptureOngoing) {
                             scope.launch { SettingsRepository.setCaptureOngoing(context, it) }
+                        }
+                        SettingsToggleItem(Icons.Default.Alarm, "Secondary alerts", "Re-alert for dismissed unresolved notifications", isSecondaryAlerts) {
+                            viewModel.setSecondaryAlertsEnabled(it)
                         }
                         SettingsArrowItem(Icons.Default.VolumeUp, "Sound & vibration", "On") {
                             val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
@@ -198,6 +202,9 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
                 group = group,
                 onSoundSelected = { uri -> viewModel.updateSoundUri(group.key, uri) },
                 onVibrationSelected = { pattern -> viewModel.updateVibrationPattern(group.key, pattern) },
+                onSecondaryAlertEnabledChanged = { viewModel.updateSecondaryAlertEnabled(group.key, it) },
+                onInitialDelayChanged = { viewModel.updateInitialAlertDelayMs(group.key, it) },
+                onRepeatDelayChanged = { viewModel.updateSecondaryAlertDelayMs(group.key, it) },
                 onDismiss = { showSoundProfileFor = null }
             )
         }
@@ -743,6 +750,9 @@ fun SoundProfileSheet(
     group: PriorityGroupEntity,
     onSoundSelected: (String) -> Unit,
     onVibrationSelected: (String) -> Unit,
+    onSecondaryAlertEnabledChanged: (Boolean) -> Unit,
+    onInitialDelayChanged: (Long) -> Unit,
+    onRepeatDelayChanged: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -751,6 +761,9 @@ fun SoundProfileSheet(
 
     var currentSound by remember { mutableStateOf(group.soundUri) }
     var currentVibration by remember { mutableStateOf(group.vibrationPattern) }
+    var secondaryEnabled by remember { mutableStateOf(group.secondaryAlertEnabled) }
+    var initialDelay by remember { mutableStateOf(group.initialAlertDelayMs) }
+    var repeatDelay by remember { mutableStateOf(group.secondaryAlertDelayMs) }
 
     val soundOptions = listOf("off" to "Off", "default" to "Default", "chime" to "Chime", "alert" to "Alert", "custom" to "Custom")
     val vibOptions = listOf("off" to "Off", "short" to "Short", "double" to "Double", "long" to "Long", "urgent" to "Urgent")
@@ -829,6 +842,75 @@ fun SoundProfileSheet(
                 }
 
                 Spacer(Modifier.height(20.dp))
+
+                // Reminders section
+                Divider(color = colors.glassBorder)
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("Reminders", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary, fontFamily = Outfit)
+                        Text("Alert if dismissed without resolving", fontSize = 11.sp, color = colors.textSecondary.copy(0.6f), fontFamily = Outfit)
+                    }
+                    Switch(
+                        checked = secondaryEnabled,
+                        onCheckedChange = { secondaryEnabled = it; onSecondaryAlertEnabledChanged(it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFF59E0B), checkedThumbColor = Color.White)
+                    )
+                }
+
+                if (secondaryEnabled) {
+                    Spacer(Modifier.height(12.dp))
+                    val initialOptions = listOf(
+                        "5 min" to 300_000L, "15 min" to 900_000L, "30 min" to 1_800_000L,
+                        "1 hr" to 3_600_000L, "2 hr" to 7_200_000L
+                    )
+                    Text("First reminder after", fontSize = 12.sp, color = colors.textSecondary, fontFamily = Outfit)
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        initialOptions.forEach { (label, ms) ->
+                            val isSelected = initialDelay == ms
+                            Surface(
+                                onClick = { initialDelay = ms; onInitialDelayChanged(ms) },
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(0.2f) else colors.itemBg,
+                                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
+                                    Text(label, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else colors.textPrimary, fontFamily = Outfit)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    val repeatOptions = listOf(
+                        "Off" to 0L, "30 min" to 1_800_000L, "1 hr" to 3_600_000L,
+                        "2 hr" to 7_200_000L, "4 hr" to 14_400_000L
+                    )
+                    Text("Repeat reminder", fontSize = 12.sp, color = colors.textSecondary, fontFamily = Outfit)
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        repeatOptions.forEach { (label, ms) ->
+                            val isSelected = repeatDelay == ms
+                            Surface(
+                                onClick = { repeatDelay = ms; onRepeatDelayChanged(ms) },
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(0.2f) else colors.itemBg,
+                                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
+                                    Text(label, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else colors.textPrimary, fontFamily = Outfit)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Spacer(Modifier.height(8.dp))
 
                 // Test button
                 Button(

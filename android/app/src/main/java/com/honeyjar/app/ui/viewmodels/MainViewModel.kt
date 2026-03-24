@@ -30,6 +30,9 @@ class MainViewModel(
     private val statsDao: StatsDao,
     private val notificationDao: NotificationDao
 ) : ViewModel() {
+    val secondaryAlertsEnabled: StateFlow<Boolean> = SettingsRepository.isSecondaryAlertsEnabled(application)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val autoBackupFrequency: StateFlow<String> = SettingsRepository.getAutoBackupFrequency(application)
         .stateIn(viewModelScope, SharingStarted.Eagerly, "off")
     val notifications: StateFlow<List<HoneyNotification>> =
@@ -161,6 +164,22 @@ class MainViewModel(
 
     fun updateVibrationPattern(key: String, pattern: String) {
         viewModelScope.launch { repository.updateVibrationPattern(key, pattern) }
+    }
+
+    fun setSecondaryAlertsEnabled(enabled: Boolean) {
+        viewModelScope.launch { SettingsRepository.setSecondaryAlertsEnabled(application, enabled) }
+    }
+
+    fun updateSecondaryAlertEnabled(key: String, enabled: Boolean) {
+        viewModelScope.launch { repository.updateSecondaryAlertEnabled(key, enabled) }
+    }
+
+    fun updateInitialAlertDelayMs(key: String, delayMs: Long) {
+        viewModelScope.launch { repository.updateInitialAlertDelayMs(key, delayMs) }
+    }
+
+    fun updateSecondaryAlertDelayMs(key: String, delayMs: Long) {
+        viewModelScope.launch { repository.updateSecondaryAlertDelayMs(key, delayMs) }
     }
 
     suspend fun buildBackupJson(context: Context): String =

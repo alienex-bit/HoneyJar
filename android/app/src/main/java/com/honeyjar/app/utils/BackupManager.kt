@@ -37,6 +37,7 @@ object BackupManager {
             put("autoBackupFrequency", SettingsRepository.getAutoBackupFrequency(context).first())
             put("hasCompletedOnboarding", SettingsRepository.hasCompletedOnboardingIntro(context).first())
             put("lastAutoBackupTime", SettingsRepository.getLastAutoBackupTime(context).first())
+            put("secondaryAlertsEnabled", SettingsRepository.isSecondaryAlertsEnabled(context).first())
         }
 
         val groupsArray = JSONArray().apply {
@@ -49,6 +50,9 @@ object BackupManager {
                     put("position", g.position)
                     put("soundUri", g.soundUri)
                     put("vibrationPattern", g.vibrationPattern)
+                    put("secondaryAlertEnabled", g.secondaryAlertEnabled)
+                    put("initialAlertDelayMs", g.initialAlertDelayMs)
+                    put("secondaryAlertDelayMs", g.secondaryAlertDelayMs)
                 })
             }
         }
@@ -115,6 +119,7 @@ object BackupManager {
             SettingsRepository.setHasCompletedOnboardingIntro(context, true)
         }
         SettingsRepository.setLastAutoBackupTime(context, s.optLong("lastAutoBackupTime", 0L))
+        SettingsRepository.setSecondaryAlertsEnabled(context, s.optBoolean("secondaryAlertsEnabled", true))
 
         // Theme
         val themeName = root.optString("theme", HoneyJarThemeType.DarkHoney.name)
@@ -132,7 +137,10 @@ object BackupManager {
                 isEnabled = g.optBoolean("isEnabled", true),
                 position = g.optInt("position", i),
                 soundUri = g.optString("soundUri", "off"),
-                vibrationPattern = g.optString("vibrationPattern", "off")
+                vibrationPattern = g.optString("vibrationPattern", "off"),
+                secondaryAlertEnabled = g.optBoolean("secondaryAlertEnabled", true),
+                initialAlertDelayMs = g.optLong("initialAlertDelayMs", 300_000L),
+                secondaryAlertDelayMs = g.optLong("secondaryAlertDelayMs", 1_800_000L)
             ))
         }
 

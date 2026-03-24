@@ -15,7 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class], version = 7, exportSchema = false)
+@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class], version = 8, exportSchema = false)
 abstract class HoneyJarDatabase : RoomDatabase() {
     abstract fun priorityGroupDao(): PriorityGroupDao
     abstract fun notificationDao(): NotificationDao
@@ -68,6 +68,17 @@ abstract class HoneyJarDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notifications ADD COLUMN isDismissedByUser INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE notifications ADD COLUMN dismissedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE notifications ADD COLUMN alertFiredAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE priority_groups ADD COLUMN secondaryAlertEnabled INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE priority_groups ADD COLUMN initialAlertDelayMs INTEGER NOT NULL DEFAULT 300000")
+                db.execSQL("ALTER TABLE priority_groups ADD COLUMN secondaryAlertDelayMs INTEGER NOT NULL DEFAULT 1800000")
+            }
+        }
+
         @Volatile
         private var INSTANCE: HoneyJarDatabase? = null
 
@@ -79,7 +90,7 @@ abstract class HoneyJarDatabase : RoomDatabase() {
                     "honeyjar_database"
                 )
                 .addCallback(DatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

@@ -25,9 +25,16 @@ import com.honeyjar.app.repositories.NotificationRepository
 import com.honeyjar.app.repositories.SettingsRepository
 import com.honeyjar.app.utils.NotificationCategories
 import com.honeyjar.app.utils.TimeUtils
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.honeyjar.app.data.dao.NotificationDao
+import com.honeyjar.app.workers.SecondaryAlertWorker
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.debounce
+import java.util.concurrent.TimeUnit
 
 class NotificationService : NotificationListenerService() {
     private var isCaptureOngoing = false
@@ -39,6 +46,8 @@ class NotificationService : NotificationListenerService() {
         private const val ACTION_MARK_ALL_READ = "com.honeyjar.app.ACTION_MARK_ALL_READ"
         private const val ALERT_NOTIF_ID_BASE = 2000
     }
+
+    private lateinit var notificationDao: NotificationDao
 
     // In-memory cache of priority group sound/vibration settings
     private var priorityGroupCache: Map<String, PriorityGroupEntity> = emptyMap()
@@ -59,7 +68,8 @@ class NotificationService : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         val database = HoneyJarDatabase.getDatabase(this)
-        NotificationRepository.initialize(database.notificationDao(), database.statsDao())
+        notificationDao = database.notificationDao()
+        NotificationRepository.initialize(notificationDao, database.statsDao())
 
         createStatusChannel()
         startForeground(STATUS_NOTIFICATION_ID, buildStatusNotification(emptyList()))
@@ -199,7 +209,6 @@ class NotificationService : NotificationListenerService() {
             )
 
             NotificationRepository.addNotification(honeyNotif)
-            postAlertIfNeeded(priority, title, text)
             Log.d("HoneyJar-Alerts", "Captured and Stored successfully!")
         } catch (e: Exception) {
             Log.e("HoneyJar-Service", "Failed to process notification from ${sbn.packageName}", e)
@@ -236,8 +245,38 @@ class NotificationService : NotificationListenerService() {
         return result
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        sbn?.let { Log.d("HoneyJar-Alerts", "Notification dismissed: ${it.packageName}") }
+    override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?, reason: Int) {
+        super.onNotificationRemoved(sbn, rankingMap, reason)
+        if (sbn == null || sbn.packageName == packageName) return
+        Log.d("HoneyJar-Alerts", "Notification removed: ${sbn.packageName} reason=$reason")
+        // reason 2 = REASON_LISTENER_CANCEL (single swipe), 9 = REASON_LISTENER_CANCEL_DELETED (clear all)
+        if (reason != 2 && reason != 9) return
+        val notifId = "${sbn.key}_${sbn.postTime}"
+        serviceScope.launch {
+            try {
+                val globalEnabled = SettingsRepository.isSecondaryAlertsEnabled(this@NotificationService).first()
+                if (!globalEnabled) return@launch
+                val notif = notificationDao.getById(notifId) ?: return@launch
+                if (notif.isResolved || notif.alertFiredAt > 0L) return@launch
+                val group = priorityGroupCache[notif.priority] ?: return@launch
+                if (!group.secondaryAlertEnabled) return@launch
+                notificationDao.markDismissedByUser(notifId, System.currentTimeMillis())
+                scheduleSecondaryAlert(notifId, notif.priority, group.initialAlertDelayMs)
+                Log.d("HoneyJar-Alerts", "Scheduled secondary alert for $notifId in ${group.initialAlertDelayMs}ms")
+            } catch (e: Exception) {
+                Log.e("HoneyJar-Service", "Failed to handle dismissal for $notifId", e)
+            }
+        }
+    }
+
+    private fun scheduleSecondaryAlert(notifId: String, categoryKey: String, delayMs: Long) {
+        val request = OneTimeWorkRequestBuilder<SecondaryAlertWorker>()
+            .setInputData(workDataOf("notifId" to notifId, "categoryKey" to categoryKey))
+            .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+            .build()
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "alert_$notifId", ExistingWorkPolicy.KEEP, request
+        )
     }
 
     private fun postAlertIfNeeded(categoryKey: String, title: String, text: String) {

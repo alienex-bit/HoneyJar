@@ -38,4 +38,16 @@ class PriorityRepository(val dao: PriorityGroupDao) {
     suspend fun updateVibrationPattern(key: String, pattern: String) {
         dao.updateVibrationPattern(key, pattern)
     }
+
+    suspend fun updateSecondaryAlertEnabled(key: String, enabled: Boolean) {
+        dao.updateSecondaryAlertEnabled(key, enabled)
+    }
+
+    suspend fun updateInitialAlertDelayMs(key: String, delayMs: Long) {
+        dao.updateInitialAlertDelayMs(key, delayMs)
+    }
+
+    suspend fun updateSecondaryAlertDelayMs(key: String, delayMs: Long) {
+        dao.updateSecondaryAlertDelayMs(key, delayMs)
+    }
 }

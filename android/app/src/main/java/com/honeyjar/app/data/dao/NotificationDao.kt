@@ -38,4 +38,13 @@ interface NotificationDao {
 
     @Query("UPDATE notifications SET isResolved = 1, resolvedAt = :resolvedAtMs WHERE isResolved = 0")
     suspend fun resolveAllNotifications(resolvedAtMs: Long)
+
+    @Query("SELECT * FROM notifications WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): NotificationEntity?
+
+    @Query("UPDATE notifications SET isDismissedByUser = 1, dismissedAt = :at WHERE id = :id AND isResolved = 0")
+    suspend fun markDismissedByUser(id: String, at: Long)
+
+    @Query("UPDATE notifications SET alertFiredAt = :firedAt WHERE id = :id")
+    suspend fun updateAlertFiredAt(id: String, firedAt: Long)
 }
