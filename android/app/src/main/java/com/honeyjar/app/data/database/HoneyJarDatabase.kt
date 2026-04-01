@@ -9,17 +9,20 @@ import com.honeyjar.app.data.dao.NotificationDao
 import com.honeyjar.app.data.entities.PriorityGroupEntity
 import com.honeyjar.app.data.entities.NotificationEntity
 import com.honeyjar.app.data.entities.NotificationStatsEntity
+import com.honeyjar.app.data.dao.AppCategoryDao
 import com.honeyjar.app.data.dao.StatsDao
+import com.honeyjar.app.data.entities.AppCategoryEntity
 import com.honeyjar.app.utils.NotificationCategories
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class], version = 8, exportSchema = false)
+@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class, AppCategoryEntity::class], version = 10, exportSchema = false)
 abstract class HoneyJarDatabase : RoomDatabase() {
     abstract fun priorityGroupDao(): PriorityGroupDao
     abstract fun notificationDao(): NotificationDao
     abstract fun statsDao(): StatsDao
+    abstract fun appCategoryDao(): AppCategoryDao
 
     companion object {
         private val MIGRATION_3_4 = object : Migration(3, 4) {
@@ -79,8 +82,49 @@ abstract class HoneyJarDatabase : RoomDatabase() {
             }
         }
 
-        @Volatile
-        private var INSTANCE: HoneyJarDatabase? = null
+        // Migration 8→9: expand categories from 7 to 13.
+        // Inserts new groups only if not already present (safe to re-run).
+        // Retired: updates (#4), delivery (#5) — remapped into device/shopping/travel.
+        // New: social, calls, weather, travel, finance, shopping, media, device.
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val newGroups = listOf(
+                    Triple("social",   "Social",   "#ec4899"),  // pink
+                    Triple("calls",    "Calls",    "#10b981"),  // emerald
+                    Triple("weather",  "Weather",  "#38bdf8"),  // sky blue
+                    Triple("travel",   "Travel",   "#f97316"),  // orange
+                    Triple("finance",  "Finance",  "#84cc16"),  // lime
+                    Triple("shopping", "Shopping", "#f43f5e"),  // rose
+                    Triple("media",    "Media",    "#8b5cf6"),  // violet
+                    Triple("device",   "Device",   "#64748b"),  // slate
+                )
+                // Retire old categories by disabling them so existing data isn't orphaned
+                db.execSQL("UPDATE priority_groups SET isEnabled = 0 WHERE key IN ('updates', 'delivery')")
+
+                newGroups.forEachIndexed { i, (key, label, colour) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO priority_groups
+                        (key, label, colour, isEnabled, sortOrder, soundUri, vibrationPattern,
+                         secondaryAlertEnabled, initialAlertDelayMs, secondaryAlertDelayMs)
+                        VALUES ('$key', '$label', '$colour', 1, ${10 + i},
+                                'off', 'off', 1, 300000, 1800000)
+                    """.trimIndent())
+                }
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS app_category_cache (
+                        packageName TEXT NOT NULL PRIMARY KEY,
+                        category TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        fetchedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+            }
+        }
 
         fun getDatabase(context: Context): HoneyJarDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -90,7 +134,7 @@ abstract class HoneyJarDatabase : RoomDatabase() {
                     "honeyjar_database"
                 )
                 .addCallback(DatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
@@ -112,13 +156,19 @@ abstract class HoneyJarDatabase : RoomDatabase() {
 
             suspend fun populateDatabase(dao: PriorityGroupDao) {
                 val defaults = listOf(
-                    PriorityGroupEntity(NotificationCategories.URGENT, "Urgent", "#ef4444", true, 0),
-                    PriorityGroupEntity(NotificationCategories.MESSAGES, "Messages", "#3b82f6", true, 1),
-                    PriorityGroupEntity(NotificationCategories.CALENDAR, "Calendar", "#f59e0b", true, 2),
-                    PriorityGroupEntity(NotificationCategories.EMAIL, "Email", "#a855f7", true, 3),
-                    PriorityGroupEntity(NotificationCategories.UPDATES, "Updates", "#22c55e", true, 4),
-                    PriorityGroupEntity(NotificationCategories.DELIVERY, "Delivery", "#fbbf24", true, 5),
-                    PriorityGroupEntity(NotificationCategories.SYSTEM, "System", "#94a3b8", true, 6)
+                    PriorityGroupEntity(NotificationCategories.URGENT,   "Urgent",   "#ef4444", true,  0),
+                    PriorityGroupEntity(NotificationCategories.MESSAGES, "Messages", "#3b82f6", true,  1),
+                    PriorityGroupEntity(NotificationCategories.SOCIAL,   "Social",   "#ec4899", true,  2),
+                    PriorityGroupEntity(NotificationCategories.EMAIL,    "Email",    "#a855f7", true,  3),
+                    PriorityGroupEntity(NotificationCategories.CALENDAR, "Calendar", "#f59e0b", true,  4),
+                    PriorityGroupEntity(NotificationCategories.CALLS,    "Calls",    "#10b981", true,  5),
+                    PriorityGroupEntity(NotificationCategories.WEATHER,  "Weather",  "#38bdf8", true,  6),
+                    PriorityGroupEntity(NotificationCategories.TRAVEL,   "Travel",   "#f97316", true,  7),
+                    PriorityGroupEntity(NotificationCategories.FINANCE,  "Finance",  "#84cc16", true,  8),
+                    PriorityGroupEntity(NotificationCategories.SHOPPING, "Shopping", "#f43f5e", true,  9),
+                    PriorityGroupEntity(NotificationCategories.MEDIA,    "Media",    "#8b5cf6", true, 10),
+                    PriorityGroupEntity(NotificationCategories.DEVICE,   "Device",   "#64748b", true, 11),
+                    PriorityGroupEntity(NotificationCategories.SYSTEM,   "System",   "#94a3b8", true, 12),
                 )
                 defaults.forEach { dao.insertPriorityGroup(it) }
             }
