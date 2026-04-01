@@ -238,7 +238,13 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                         }
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(totalCount.toString(), fontSize = 23.sp, fontWeight = FontWeight.Black, color = colors.textPrimary)
+                        val countText = if (totalCount >= 10000) "${totalCount / 1000}k+" else totalCount.toString()
+                        val countFontSize = when {
+                            totalCount >= 10000 -> 16.sp
+                            totalCount >= 1000  -> 18.sp
+                            else                -> 23.sp
+                        }
+                        Text(countText, fontSize = countFontSize, fontWeight = FontWeight.Black, color = colors.textPrimary)
                         Text("today", fontSize = 9.sp, color = colors.textPrimary.copy(0.38f))
                     }
                 }
@@ -268,7 +274,7 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                                 fontSize = 9.sp,
                                 color = colors.textPrimary.copy(0.35f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                modifier = Modifier.width(20.dp),
+                                modifier = Modifier.widthIn(min = 20.dp),
                                 maxLines = 1
                             )
                         }
@@ -294,7 +300,7 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                                 fontSize = 9.sp,
                                 color = colors.textPrimary.copy(0.35f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                modifier = Modifier.width(20.dp),
+                                modifier = Modifier.widthIn(min = 20.dp),
                                 maxLines = 1
                             )
                         }
@@ -486,37 +492,43 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
             Column(Modifier.weight(1f)) {
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         group.sourceApps,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textSecondary,
-                        fontFamily = Outfit
+                        fontFamily = Outfit,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 6.dp)
                     )
                     Text(
                         TimeUtils.formatDuration(group.latestTime),
                         fontSize = 10.sp,
                         color = colors.textSecondary.copy(0.6f),
-                        fontFamily = Outfit
+                        fontFamily = Outfit,
+                        maxLines = 1
                     )
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     group.summaryTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = colors.textPrimary,
                     fontFamily = Outfit,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 Text(
                     group.category.replaceFirstChar { it.uppercase() },
                     fontSize = 13.sp,
                     color = colors.textSecondary,
-                    fontFamily = Outfit
+                    fontFamily = Outfit,
+                    maxLines = 1
                 )
             }
 
@@ -629,10 +641,13 @@ private fun buildSummaryTitle(group: List<HoneyNotification>): String {
             }
         }
         "email" -> {
-            val subjects = group.map { it.title }.distinct().take(2)
+            val subjects = group.map { it.title.take(40) }.distinct().take(2)
             if (group.size > 2) "${subjects.joinToString(", ")} +${group.size - 2}" else subjects.joinToString(", ")
         }
-        else -> group.first().title
+        else -> {
+            val latest = group.maxByOrNull { it.postTime } ?: group.first()
+            latest.title.trim().ifBlank { latest.text.take(60).trim() }
+        }
     }
 }
 

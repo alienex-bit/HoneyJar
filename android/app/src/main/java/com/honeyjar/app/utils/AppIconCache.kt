@@ -10,6 +10,9 @@ object AppIconCache {
     private val cache = ConcurrentHashMap<String, ImageBitmap>()
     private val failures = ConcurrentHashMap.newKeySet<String>()
 
+    /** Returns a cached icon immediately without loading — returns null if not yet in cache. */
+    fun peek(packageName: String): ImageBitmap? = cache[packageName]
+
     fun get(packageName: String, context: Context): ImageBitmap? {
         if (cache.size > 300) cache.clear()
         if (failures.size > 300) failures.clear()

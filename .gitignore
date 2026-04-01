@@ -50,3 +50,8 @@ desktop.ini
 # Generated Room schemas (regenerate from source)
 # Uncomment if you don't want to track schema exports:
 # android/app/schemas/
+
+# Local Fixes and Backups
+Fixes/
+HoneyJar_Backup/
+HoneyJar_Project.zip
