@@ -157,7 +157,12 @@ class NotificationService : NotificationListenerService() {
     private fun postAlertIfNeeded(categoryKey: String, title: String, text: String) {
         val group = priorityGroupCache[categoryKey] ?: return
         if (group.soundUri == "off" && group.vibrationPattern == "off") return
-        val channelId = ensureAlertChannel(categoryKey, group.soundUri, group.vibrationPattern)
+        
+        // Use centralized helper to ensure channel exists and is correctly configured
+        val channelId = com.honeyjar.app.utils.NotificationHelper.ensureAlertChannel(
+            this, categoryKey, group.soundUri, group.vibrationPattern
+        )
+        
         val alertId = ALERT_NOTIF_ID_BASE + (categoryKey.hashCode() and 0x7FFFFFFF)
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_status_bee)
@@ -167,40 +172,6 @@ class NotificationService : NotificationListenerService() {
             .setAutoCancel(true)
             .build()
         getSystemService(NotificationManager::class.java).notify(alertId, notification)
-    }
-
-    private fun ensureAlertChannel(categoryKey: String, soundUri: String, vibPattern: String): String {
-        val channelId = "honeyjar_alert_$categoryKey"
-        if (channelSettingsCache[categoryKey] == Pair(soundUri, vibPattern)) return channelId
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.deleteNotificationChannel(channelId)
-        val channel = NotificationChannel(channelId, "${categoryKey.replaceFirstChar { it.uppercase() }} Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
-            setSound(resolveSoundUri(soundUri), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
-            resolveVibrationPattern(vibPattern)?.let {
-                enableVibration(true)
-                vibrationPattern = it
-            }
-        }
-        nm.createNotificationChannel(channel)
-        channelSettingsCache[categoryKey] = Pair(soundUri, vibPattern)
-        return channelId
-    }
-
-    private fun resolveSoundUri(soundUri: String): Uri? = when (soundUri) {
-        "off" -> null
-        "default" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        "chime" -> Uri.parse("android.resource://$packageName/raw/sound_chime")
-        "alert" -> Uri.parse("android.resource://$packageName/raw/sound_alert")
-        else -> try { Uri.parse(soundUri) } catch (_: Exception) { null }
-    }
-
-    private fun resolveVibrationPattern(pattern: String): LongArray? = when (pattern) {
-        "off" -> null
-        "short" -> longArrayOf(0, 100)
-        "double" -> longArrayOf(0, 100, 100, 100)
-        "long" -> longArrayOf(0, 500)
-        "urgent" -> longArrayOf(0, 100, 50, 100, 50, 300)
-        else -> null
     }
 
     private fun createStatusChannel() {

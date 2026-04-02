@@ -36,7 +36,11 @@ class SecondaryAlertWorker(ctx: Context, params: WorkerParameters) : CoroutineWo
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val channelId = "honeyjar_alert_$categoryKey"
+        // Ensure the channel exists before posting, as the worker might run 
+        // before the main NotificationService has ever handled this category.
+        val channelId = com.honeyjar.app.utils.NotificationHelper.ensureAlertChannel(
+            applicationContext, categoryKey, group.soundUri, group.vibrationPattern
+        )
         val notification = NotificationCompat.Builder(applicationContext, channelId)
             .setSmallIcon(R.drawable.ic_status_bee)
             .setContentTitle("Unread: ${notif.title}")
