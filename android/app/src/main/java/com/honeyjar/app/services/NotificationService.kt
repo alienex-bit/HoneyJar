@@ -104,6 +104,7 @@ class NotificationService : NotificationListenerService() {
 
     override fun onDestroy() {
         try { unregisterReceiver(markAllReadReceiver) } catch (_: Exception) { }
+        NotificationRepository.shutdown()
         super.onDestroy()
         serviceScope.cancel()
     }

@@ -20,18 +20,38 @@ import java.util.Calendar
 import com.honeyjar.app.data.HoneyEncryptor
 import org.json.JSONObject
 
+import kotlinx.coroutines.SupervisorJob
+import kotlin.coroutines.CoroutineContext
+
 object NotificationRepository {
     private val daoFlow = MutableStateFlow<NotificationDao?>(null)
     @Volatile private var dao: NotificationDao? = null
     @Volatile private var statsDao: StatsDao? = null
     @Volatile private var encryptor: HoneyEncryptor? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    
+    private var repositoryJob = SupervisorJob()
+    private var scope = CoroutineScope(Dispatchers.IO + repositoryJob)
 
     fun initialize(notificationDao: NotificationDao, statsDao: StatsDao, context: Context) {
+        // If the repository was previously shut down, recreate the scope
+        if (!repositoryJob.isActive) {
+            repositoryJob = SupervisorJob()
+            scope = CoroutineScope(Dispatchers.IO + repositoryJob)
+        }
+        
         this.dao = notificationDao
         this.statsDao = statsDao
         this.encryptor = HoneyEncryptor(context)
         this.daoFlow.value = notificationDao
+    }
+
+    /**
+     * Explicitly cancels all pending coroutines. Should be called when the 
+     * main owner (NotificationService) is destroyed.
+     */
+    fun shutdown() {
+        repositoryJob.cancel()
+        Log.i("HoneyJar-Repo", "NotificationRepository scope has been shut down.")
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
