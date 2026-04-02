@@ -37,8 +37,6 @@ abstract class NotificationDao {
     @Query("DELETE FROM notifications")
     abstract suspend fun deleteAllNotifications()
 
-    @Query("DELETE FROM notifications WHERE postTime < :timestamp")
-    abstract suspend fun deleteOldNotifications(timestamp: Long)
 
     @Query("UPDATE notifications SET priority = :priority WHERE id = :id")
     abstract suspend fun updatePriority(id: String, priority: String)

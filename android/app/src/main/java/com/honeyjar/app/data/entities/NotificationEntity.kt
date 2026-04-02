@@ -37,7 +37,10 @@ data class NotificationEntity(
             Arrays.equals(encryptedData, other.encryptedData) &&
             snoozeUntil == other.snoozeUntil &&
             resolvedAt == other.resolvedAt &&
-            systemActionsJson == other.systemActionsJson
+            systemActionsJson == other.systemActionsJson &&
+            isDismissedByUser == other.isDismissedByUser &&
+            dismissedAt == other.dismissedAt &&
+            alertFiredAt == other.alertFiredAt
     }
 
     override fun hashCode(): Int {
@@ -54,6 +57,9 @@ data class NotificationEntity(
         result = 31 * result + snoozeUntil.hashCode()
         result = 31 * result + resolvedAt.hashCode()
         result = 31 * result + (systemActionsJson?.hashCode() ?: 0)
+        result = 31 * result + isDismissedByUser.hashCode()
+        result = 31 * result + dismissedAt.hashCode()
+        result = 31 * result + alertFiredAt.hashCode()
         return result
     }
 }

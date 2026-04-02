@@ -194,14 +194,6 @@ object NotificationRepository {
         }
     }
 
-    fun purgeOldNotifications(autopurgeDays: Int) {
-        if (autopurgeDays <= 0) return
-        scope.launch {
-            val threshold = System.currentTimeMillis() - (autopurgeDays.toLong() * 24 * 60 * 60 * 1000)
-            dao?.deleteOldNotifications(threshold)
-            Log.d("HoneyJar-Purge", "Purged notifications older than $autopurgeDays days (Threshold: $threshold)")
-        }
-    }
 
     private fun NotificationEntity.toModel(): HoneyNotification {
         var finalTitle = title
