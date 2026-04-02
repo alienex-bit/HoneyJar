@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.NavDestination.Companion.hierarchy
 import com.honeyjar.app.ui.screens.HomeScreen
 import com.honeyjar.app.ui.screens.HistoryScreen
 import com.honeyjar.app.ui.screens.StatsScreen
@@ -142,21 +143,31 @@ fun MainAppScaffold(
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val currentDestination = navBackStackEntry?.destination
+    val currentRoute = currentDestination?.route
 
     Scaffold(
         bottomBar = {
             if (currentRoute != Screen.Onboarding.route) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.background,
-                    tonalElevation = 8.dp
+                    tonalElevation = 0.dp
                 ) {
                     val items = listOf(Screen.Home, Screen.History, Screen.AI, Screen.Stats, Screen.Settings)
                     items.forEach { screen ->
+                        val isSelected = currentDestination?.hierarchy?.any { it.route?.startsWith(screen.route) == true } == true
+                        
                         NavigationBarItem(
                             icon = { Icon(screen.icon!!, contentDescription = screen.title) },
                             label = { Text(screen.title) },
-                            selected = currentRoute == screen.route,
+                            selected = isSelected,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            ),
                             onClick = {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.startDestinationId)

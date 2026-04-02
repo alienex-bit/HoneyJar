@@ -29,6 +29,9 @@ object NotificationRepository {
     @Volatile private var statsDao: StatsDao? = null
     @Volatile private var encryptor: HoneyEncryptor? = null
     
+    // Cache to avoid re-decrypting the same notification entity repeatedly
+    private val modelCache = java.util.concurrent.ConcurrentHashMap<String, Pair<NotificationEntity, HoneyNotification>>()
+
     private var repositoryJob = SupervisorJob()
     private var scope = CoroutineScope(Dispatchers.IO + repositoryJob)
 
@@ -57,16 +60,16 @@ object NotificationRepository {
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val notifications: Flow<List<HoneyNotification>> = daoFlow.flatMapLatest { currentDao ->
         currentDao?.getAllNotifications()?.map { entities ->
-            entities.map { it.toModel() }
-        } ?: flowOf(emptyList())
+            entities.map { it.toCachedModel() }
+        }?.flowOn(Dispatchers.Default) ?: flowOf(emptyList())
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val notificationsHome: Flow<List<HoneyNotification>> = daoFlow.flatMapLatest { currentDao ->
         val todayStart = TimeUtils.getDayStart(System.currentTimeMillis())
         currentDao?.getHomeNotifications(todayStart)?.map { entities ->
-            entities.map { it.toModel() }
-        } ?: flowOf(emptyList())
+            entities.map { it.toCachedModel() }
+        }?.flowOn(Dispatchers.Default) ?: flowOf(emptyList())
     }
 
     fun addNotification(notification: HoneyNotification) {
@@ -194,6 +197,19 @@ object NotificationRepository {
         }
     }
 
+    /**
+     * Optimized mapping that uses a thread-safe cache to avoid redundant decryption.
+     */
+    private fun NotificationEntity.toCachedModel(): HoneyNotification {
+        val cached = modelCache[this.id]
+        if (cached != null && cached.first == this) {
+            return cached.second
+        }
+
+        val model = this.toModel()
+        modelCache[this.id] = this to model
+        return model
+    }
 
     private fun NotificationEntity.toModel(): HoneyNotification {
         var finalTitle = title

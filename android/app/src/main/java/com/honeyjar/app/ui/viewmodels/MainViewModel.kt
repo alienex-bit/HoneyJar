@@ -8,6 +8,7 @@ import com.honeyjar.app.data.entities.NotificationStatsEntity
 import com.honeyjar.app.repositories.PriorityRepository
 import com.honeyjar.app.repositories.NotificationRepository
 import com.honeyjar.app.repositories.SettingsRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.honeyjar.app.data.dao.StatsDao
@@ -92,11 +93,11 @@ class MainViewModel(
 
     val activeCount: StateFlow<Int> = combine(notificationsHome, tickerFlow) { list, now ->
         list.count { n -> !n.isResolved && n.snoozeUntil <= now }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     val snoozedCount: StateFlow<Int> = combine(notificationsHome, tickerFlow) { list, now ->
         list.count { n -> !n.isResolved && n.snoozeUntil > now }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     private val notificationsDebounced = NotificationRepository.notifications.debounce(1000L)
@@ -114,7 +115,7 @@ class MainViewModel(
             val dayStart = todayStart - (daysAgo * dayMs)
             all.count { it.postTime >= dayStart && it.postTime < dayStart + dayMs }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, List(7) { 0 })
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, List(7) { 0 })
 
     val weeklyCount: StateFlow<Int> = barChartData.map { bars -> bars.sum() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -124,11 +125,11 @@ class MainViewModel(
         val weekAgo     = todayStart - 7 * 86_400_000L
         val twoWeeksAgo = todayStart - 14 * 86_400_000L
         all.count { it.postTime >= twoWeeksAgo && it.postTime < weekAgo }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     val categoryBreakdown: StateFlow<Map<String, Int>> = notificationsDebounced.map { all ->
         all.groupBy { it.priority.lowercase() }.mapValues { it.value.size }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val heatmapData: StateFlow<Array<IntArray>> = notificationsDebounced.map { all ->
         val data = Array(7) { IntArray(8) { 0 } }
@@ -140,26 +141,30 @@ class MainViewModel(
             data[day][bucket]++
         }
         data
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, Array(7) { IntArray(8) { 0 } })
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, Array(7) { IntArray(8) { 0 } })
 
     val appBreakdown: StateFlow<List<AppGuiltEntry>> = notificationsDebounced.map { all ->
         val dayMs = 86_400_000L
         val todayStart = TimeUtils.getDayStart(System.currentTimeMillis())
         val weekAgo = todayStart - 6 * dayMs
-        val historySet = all.map { it.packageName to TimeUtils.getDayStart(it.postTime) }.toSet()
+        
+        // Pre-calculate history sets to avoid repeating work in the loop
+        val historySet = mutableSetOf<String>()
+        all.forEach { historySet.add("${it.packageName}_${TimeUtils.getDayStart(it.postTime)}") }
+        
         val recent = all.filter { it.postTime >= weekAgo }
         recent.groupBy { it.packageName }
             .map { (pkg, notifs) ->
                 var streak = 0
                 for (daysAgo in 0..365) {
                     val dayStart = todayStart - daysAgo * dayMs
-                    if (historySet.contains(pkg to dayStart)) streak++ else break
+                    if (historySet.contains("${pkg}_$dayStart")) streak++ else break
                 }
                 AppGuiltEntry(pkg, AppLabelCache.get(pkg, application), notifs.size, streak)
             }
             .sortedByDescending { it.count7Days }
             .take(10)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val avgResponseMinutes: StateFlow<Long?> = notificationsDebounced.map { all ->
         all.filter { it.isResolved && it.resolvedAt > 0 && it.resolvedAt > it.postTime }
