@@ -116,7 +116,7 @@ Category string keys (stored in `PriorityGroupEntity.key` and `HoneyNotification
 
 ## Encryption
 
-`HoneyEncryptor` uses Android Keystore (AES/GCM/NoPadding) with key alias `HoneyJarMainKey`. **Encryption is currently not applied at write time** — `NotificationRepository.toEntity()` always sets `iv = null` and `encryptedData = null`, storing `title` and `text` as plaintext columns. The `HoneyEncryptor` class is defined and correct but is not called anywhere in the active code path. Also note: the `Context` parameter in its constructor is unused.
+`HoneyEncryptor` uses Android Keystore (AES/GCM/NoPadding) with key alias `HoneyJarMainKey`. **All alerts are encrypted at write time.** `NotificationRepository.toEntity()` wraps notification content into a JSON blob, encrypts it, and populates the `iv` and `encryptedData` columns. The plaintext `title` and `text` columns are set to `"[Encrypted]"` as placeholders. `toModel()` automatically decrypts content on-the-fly with full fallback support for legacy plaintext data.
 
 ## Backup
 

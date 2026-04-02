@@ -17,15 +17,20 @@ import com.honeyjar.app.utils.TimeUtils
 import org.json.JSONArray
 import java.util.Calendar
 
+import com.honeyjar.app.data.HoneyEncryptor
+import org.json.JSONObject
+
 object NotificationRepository {
     private val daoFlow = MutableStateFlow<NotificationDao?>(null)
     @Volatile private var dao: NotificationDao? = null
     @Volatile private var statsDao: StatsDao? = null
+    @Volatile private var encryptor: HoneyEncryptor? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    fun initialize(notificationDao: NotificationDao, statsDao: StatsDao) {
+    fun initialize(notificationDao: NotificationDao, statsDao: StatsDao, context: Context) {
         this.dao = notificationDao
         this.statsDao = statsDao
+        this.encryptor = HoneyEncryptor(context)
         this.daoFlow.value = notificationDao
     }
 
@@ -54,7 +59,7 @@ object NotificationRepository {
                 }
                 currentDao.insertNotification(notification.toEntity())
                 incrementStats(notification.priority, notification.postTime)
-                Log.d("HoneyJar-Alerts", "Successfully stored notification: ${notification.title}")
+                Log.d("HoneyJar-Alerts", "Successfully stored (encrypted) notification: ${notification.title}")
             } catch (e: Exception) {
                 Log.e("HoneyJar-Alerts", "CRITICAL FAILURE in addNotification: ${e.message}")
                 e.printStackTrace()
@@ -147,8 +152,10 @@ object NotificationRepository {
         // This is ~50x faster and avoids hammering the main thread.
         currentDao.runInTransaction {
             all.forEach { entity ->
+                // Decrypt for categorization logic
+                val decryptedModel = entity.toModel()
                 val newCat = AppCategoryResolver.categorizeStatic(
-                    entity.packageName, entity.title, entity.text
+                    decryptedModel.packageName, decryptedModel.title, decryptedModel.text
                 ) ?: NotificationCategories.SYSTEM
                 if (newCat != entity.priority) {
                     // updatePrioritySync is a non-suspend @Query used inside transactions
@@ -177,11 +184,29 @@ object NotificationRepository {
     }
 
     private fun NotificationEntity.toModel(): HoneyNotification {
+        var finalTitle = title
+        var finalText = text
+
+        // Automatic Decryption if columns are populated
+        if (iv != null && encryptedData != null) {
+            try {
+                encryptor?.let { engine ->
+                    val decrypted = String(engine.decrypt(iv, encryptedData))
+                    val json = JSONObject(decrypted)
+                    finalTitle = json.optString("title", title)
+                    finalText = json.optString("text", text)
+                }
+            } catch (e: Exception) {
+                Log.e("HoneyJar-Security", "Decryption failed for $id, using placeholder text.")
+                // Leave finalTitle/finalText as the placeholder strings stored in the DB
+            }
+        }
+
         return HoneyNotification(
             id = id,
             packageName = packageName,
-            title = title,
-            text = text,
+            title = finalTitle,
+            text = finalText,
             postTime = postTime,
             priority = priority,
             isResolved = isResolved,
@@ -198,17 +223,33 @@ object NotificationRepository {
     }
 
     private fun HoneyNotification.toEntity(): NotificationEntity {
+        var ivBlob: ByteArray? = null
+        var dataBlob: ByteArray? = null
+
+        try {
+            encryptor?.let { engine ->
+                val json = JSONObject()
+                json.put("title", title)
+                json.put("text", text)
+                val (iv, encrypted) = engine.encrypt(json.toString().toByteArray())
+                ivBlob = iv
+                dataBlob = encrypted
+            }
+        } catch (e: Exception) {
+            Log.e("HoneyJar-Security", "Encryption failed for $id, falling back to plaintext.")
+        }
+
         return NotificationEntity(
             id = id,
             packageName = packageName,
-            title = title,
-            text = text,
+            title = if (dataBlob != null) "[Encrypted]" else title,
+            text = if (dataBlob != null) "[Encrypted]" else text,
             postTime = postTime,
             priority = priority,
             isResolved = isResolved,
             isGrouped = isGrouped,
-            iv = null,
-            encryptedData = null,
+            iv = ivBlob,
+            encryptedData = dataBlob,
             snoozeUntil = snoozeUntil,
             resolvedAt = resolvedAt,
             systemActionsJson = if (systemActions.isNotEmpty()) JSONArray(systemActions).toString() else null

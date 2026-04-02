@@ -68,7 +68,7 @@ class NotificationService : NotificationListenerService() {
         val database = HoneyJarDatabase.getDatabase(this)
         notificationDao = database.notificationDao()
         appCategoryDao = database.appCategoryDao()
-        NotificationRepository.initialize(notificationDao, database.statsDao())
+        NotificationRepository.initialize(notificationDao, database.statsDao(), applicationContext)
 
         serviceScope.launch { AppCategoryResolver.prewarm(appCategoryDao) }
 
