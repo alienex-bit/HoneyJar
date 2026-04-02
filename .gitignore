@@ -26,10 +26,7 @@ android/gradle/wrapper/gradle-wrapper.jar
 keystore.properties
 release.properties
 
-# Internal docs
-docs/
-
-# Data backups (may contain personal notification data)
+# OS files
 *.json
 
 # Local build logs
@@ -55,5 +52,8 @@ desktop.ini
 Fixes/
 HoneyJar_Backup/
 HoneyJar_Project.zip
-CLAUDE.md
-.claude/
+# Internal Documents & Logs
+/docs/
+/logs/
+/*.md
+/.claude/
