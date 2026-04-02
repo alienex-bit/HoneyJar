@@ -22,7 +22,7 @@ object GeminiApiService {
 
     private const val TAG = "HoneyJar-AI"
     private const val MODEL = "gemini-1.5-flash"
-    private const val ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1/models"
+    private const val ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 30_000
 
