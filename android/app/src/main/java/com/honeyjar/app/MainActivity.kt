@@ -53,20 +53,30 @@ class MainActivity : FragmentActivity() {
         ThemePrefs.initialize(this)
         NotificationRepository.initialize(database.notificationDao(), database.statsDao())
 
-        // Pre-warm caches and ensure history categories are up to date with new schema.
+        // Pre-warm caches on a background thread — does NOT block startup.
+        // recategorizeAll() runs fire-and-forget so the UI is never delayed by it.
         val appContext = applicationContext
         CoroutineScope(Dispatchers.IO).launch {
-            val notifications = NotificationRepository.notifications.first()
-            
-            // Fix categories for existing history (e.g. after adding social/finance)
+            // Ensure any new category groups exist in DB (fast, schema-only op)
             AppCategoryResolver.ensureCategoriesExist(repository)
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            // Recategorise historic notifications in the background.
+            // Deliberately not awaited — UI should never wait for this.
             NotificationRepository.recategorizeAll()
-
-            notifications.map { it.packageName }.distinct()
-                .forEach {
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            // Warm app label + icon caches using whatever is already in the flow.
+            // Uses first() with a short timeout so we don't stall indefinitely.
+            try {
+                val notifications = kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                    NotificationRepository.notifications.first { it.isNotEmpty() }
+                } ?: return@launch
+                notifications.map { it.packageName }.distinct().forEach {
                     AppLabelCache.get(it, appContext)
                     AppIconCache.get(it, appContext)
                 }
+            } catch (_: Exception) {}
         }
 
         setContent {

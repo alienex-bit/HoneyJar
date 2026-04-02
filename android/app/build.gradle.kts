@@ -7,13 +7,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
 }
 
-val localApiProperties = Properties().apply {
-    val file = project.rootProject.file("local.api.properties")
-    if (file.exists()) {
-        file.inputStream().use { load(it) }
-    }
-}
-val geminiKey = localApiProperties.getProperty("gemini_api_key") ?: ""
+// No local API keys needed for local AI logic
 
 android {
     namespace = "com.honeyjar.app"
@@ -33,7 +27,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
+// no-op build config for AI
     }
 
     buildTypes {

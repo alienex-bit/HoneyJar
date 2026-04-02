@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
@@ -60,7 +61,7 @@ fun AppIcon(
         } else {
             val fallbackIcon = when (category.lowercase()) {
                 "urgent"    -> Icons.Default.Warning
-                "messages"  -> Icons.Default.Chat
+                "messages"  -> Icons.AutoMirrored.Filled.Chat
                 "social"    -> Icons.Default.Public
                 "email"     -> Icons.Default.Email
                 "calendar"  -> Icons.Default.CalendarToday

@@ -94,6 +94,7 @@ class NotificationService : NotificationListenerService() {
         }
 
         serviceScope.launch {
+            @OptIn(kotlinx.coroutines.FlowPreview::class)
             NotificationRepository.notificationsHome
                 .debounce(2000L)
                 .collect { today ->

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StatsDao {
-    @Query("SELECT * FROM notification_stats ORDER BY dateStart ASC")
+    @Query("SELECT * FROM notification_stats ORDER BY dateStart DESC LIMIT 500")
     fun getAllStats(): Flow<List<NotificationStatsEntity>>
 
     @Query("""

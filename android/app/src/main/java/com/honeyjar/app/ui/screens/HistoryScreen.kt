@@ -295,7 +295,7 @@ fun HistoryScreen(
                             }
                         }
 
-                        Divider(color = colors.glassBorder, thickness = 1.dp)
+                        HorizontalDivider(color = colors.glassBorder, thickness = 1.dp)
 
                         HistoryCategoryChips(
                             priorityGroups = priorityGroups,
@@ -415,7 +415,7 @@ private fun HistoryCategoryChips(
     selected: PriorityGroupEntity?,
     onSelect: (PriorityGroupEntity?) -> Unit
 ) {
-    val colors = LocalHoneyJarColors.current
+    @Suppress("UNUSED_VARIABLE") val colors = LocalHoneyJarColors.current
     val enabledGroups = remember(priorityGroups) {
         priorityGroups.filter { it.isEnabled }.sortedBy { it.position }
     }

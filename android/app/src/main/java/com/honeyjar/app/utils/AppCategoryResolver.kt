@@ -241,7 +241,7 @@ object AppCategoryResolver {
         }
     }
 
-    suspend fun resolve(packageName: String, context: Context, dao: AppCategoryDao): String {
+    suspend fun resolve(packageName: String, @Suppress("UNUSED_PARAMETER") context: Context, dao: AppCategoryDao): String {
         memoryCache[packageName]?.let { return it }
 
         val dbEntry = withContext(Dispatchers.IO) { dao.getByPackage(packageName) }

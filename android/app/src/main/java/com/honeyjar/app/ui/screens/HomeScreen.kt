@@ -157,7 +157,7 @@ fun HomeScreen(
         if (isSmartGrouping) {
             items(digestGroups) { group ->
                 var showActions by remember { mutableStateOf(false) }
-                val context = LocalContext.current
+                val localContext = LocalContext.current
                 val priorityGroups by viewModel.allPriorityGroups.collectAsState()
 
                 DigestCard(
@@ -176,7 +176,7 @@ fun HomeScreen(
                         onAction = { action ->
                             when {
                                 action == "open_app" -> {
-                                    launchApp(context, group.packageName)
+                                    launchApp(localContext, group.packageName)
                                     showActions = false
                                 }
                                 action == "resolve" -> {
@@ -206,7 +206,7 @@ fun HomeScreen(
         } else {
             items(flatNotifications) { notif ->
                 var showActions by remember { mutableStateOf(false) }
-                val context = LocalContext.current
+                val localContext = LocalContext.current
                 val priorityGroups by viewModel.allPriorityGroups.collectAsState()
                 val color = ColorUtils.parseHexColor(
                     heroPriorityColors[notif.priority.lowercase()] ?: "#94a3b8"
@@ -330,7 +330,7 @@ fun ManagementRow(
 
 @Composable
 fun HeaderSection(autoBackupFrequency: String, onBackupClick: () -> Unit) {
-    val colors = LocalHoneyJarColors.current
+    @Suppress("UNUSED_VARIABLE") val colors = LocalHoneyJarColors.current
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -494,7 +494,7 @@ fun HeroCard(displayNotifications: List<HoneyNotification>, allNotifications: Li
                 }
             }
 
-            Divider(Modifier.padding(vertical = 6.dp), color = colors.textPrimary.copy(0.07f), thickness = 1.dp)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = colors.textPrimary.copy(0.07f), thickness = 1.dp)
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 val footerText = if (activeCount > 0) "Action required on $activeCount alerts" else "No urgent alerts at this moment"
@@ -665,7 +665,7 @@ fun FilterTab(label: String, emoji: String, isActive: Boolean, categoryColor: Co
 fun DigestCard(
     group: DigestGroup,
     onTap: () -> Unit,
-    onResolve: () -> Unit
+    @Suppress("UNUSED_PARAMETER") onResolve: () -> Unit
 ) {
     val colors = LocalHoneyJarColors.current
     GlassCard(

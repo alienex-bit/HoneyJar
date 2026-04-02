@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -388,7 +389,7 @@ fun SettingsArrowItem(icon: ImageVector, title: String, subtitle: String, onClic
             Text(subtitle, fontSize = 12.sp, color = colors.textSecondary)
         }
         if (onClick != null) {
-            Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = colors.textSecondary.copy(0.4f), modifier = Modifier.size(24.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.textSecondary.copy(0.4f), modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -682,7 +683,7 @@ fun BackupSection(viewModel: MainViewModel) {
             onClick = { restoreLauncher.launch(arrayOf("application/json", "*/*")) }
         )
 
-        Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
 
         Column(
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1026,7 +1027,7 @@ fun SoundProfileSheet(
                 Spacer(Modifier.height(20.dp))
 
                 // Reminders section
-                Divider(color = colors.glassBorder)
+                HorizontalDivider(color = colors.glassBorder)
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {

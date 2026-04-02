@@ -359,7 +359,7 @@ fun CategoryBreakdown(categoryData: Map<String, Int>, priorityColors: Map<String
 
             // Divider before noise if both present
             if (signalCounts.isNotEmpty() && noiseCounts.isNotEmpty()) {
-                Divider(color = colors.glassBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
+                HorizontalDivider(color = colors.glassBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
                 Text(
                     "Background",
                     fontSize = 9.sp,
@@ -553,7 +553,7 @@ fun AppGuiltSection(entries: List<AppGuiltEntry>) {
                     }
                 }
                 if (index < entries.lastIndex) {
-                    Divider(color = colors.glassBorder, thickness = 0.5.dp)
+                    HorizontalDivider(color = colors.glassBorder, thickness = 0.5.dp)
                 }
             }
         }

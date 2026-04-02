@@ -445,7 +445,7 @@ fun ProPricingPage(onFinished: () -> Unit) {
                     Text("one-time · no recurring fees", color = colors.textSecondary, fontSize = 12.sp, fontFamily = Outfit)
                     
                     Spacer(Modifier.height(12.dp))
-                    Divider(color = colors.glassBorder)
+                    HorizontalDivider(color = colors.glassBorder)
                     Spacer(Modifier.height(12.dp))
                     
                     val features = listOf(

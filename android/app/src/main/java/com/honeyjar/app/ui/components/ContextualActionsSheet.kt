@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,8 +115,8 @@ fun ContextualActionsSheet(
 
                     Spacer(Modifier.height(24.dp))
 
-                    ActionItem(Icons.Default.OpenInNew, "Open $appLabel") { onAction("open_app") }
-                    Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
+                    ActionItem(Icons.AutoMirrored.Filled.OpenInNew, "Open $appLabel") { onAction("open_app") }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
                     val isSnoozed = notification.snoozeUntil > System.currentTimeMillis()
                     
                     if (notification.isResolved) {
@@ -122,15 +124,15 @@ fun ContextualActionsSheet(
                     } else {
                         ActionItem(Icons.Default.CheckCircle, "Mark Read") { onAction("resolve") }
                     }
-                    Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
                     if (isSnoozed) {
                         ActionItem(Icons.Default.NotificationsActive, "Unsnooze") { onAction("unsnooze") }
                     } else {
                         ActionItem(Icons.Default.Schedule, "Snooze for 1h") { onAction("snooze:3600000") }
                     }
-                    Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
-                    ActionItem(Icons.Default.Label, "Change Priority") { showPriorityMenu = true }
-                    Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
+                    ActionItem(Icons.AutoMirrored.Filled.Label, "Change Priority") { showPriorityMenu = true }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
                     ActionItem(Icons.Default.VisibilityOff, "Ignore Category") { showIgnoreMenu = true }
                 }
             }
