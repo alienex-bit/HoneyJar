@@ -59,14 +59,23 @@ fun AppIcon(
             )
         } else {
             val fallbackIcon = when (category.lowercase()) {
-                "urgent"   -> Icons.Default.Warning
-                "messages" -> Icons.Default.Chat
-                "email"    -> Icons.Default.Email
-                "calendar" -> Icons.Default.CalendarToday
-                "delivery" -> Icons.Default.LocalShipping
-                "updates"  -> Icons.Default.SystemUpdate
-                "system"   -> Icons.Default.Settings
-                else       -> Icons.Default.Notifications
+                "urgent"    -> Icons.Default.Warning
+                "messages"  -> Icons.Default.Chat
+                "social"    -> Icons.Default.Public
+                "email"     -> Icons.Default.Email
+                "calendar"  -> Icons.Default.CalendarToday
+                "calls"     -> Icons.Default.Call
+                "weather"   -> Icons.Default.WbSunny
+                "travel"    -> Icons.Default.DirectionsCar
+                "finance"   -> Icons.Default.AccountBalanceWallet
+                "shopping"  -> Icons.Default.ShoppingCart
+                "media"     -> Icons.Default.PlayCircle
+                "security"  -> Icons.Default.Security
+                "connected" -> Icons.Default.Devices
+                "updates"   -> Icons.Default.SystemUpdate
+                "photos"    -> Icons.Default.PhotoCamera
+                "system"    -> Icons.Default.Settings
+                else        -> Icons.Default.Notifications
             }
             Box(
                 modifier = Modifier

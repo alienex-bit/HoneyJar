@@ -47,6 +47,7 @@ fun ContextualActionsSheet(
     }
 
     var showPriorityMenu by remember { mutableStateOf(false) }
+    var showIgnoreMenu by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -84,6 +85,28 @@ fun ContextualActionsSheet(
                     }
                 }
 
+                showIgnoreMenu -> {
+                    Text("Ignore Category", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colors.textPrimary)
+                    Text("Capture notifications but hide from Digest", fontSize = 12.sp, color = colors.textSecondary)
+                    Spacer(Modifier.height(16.dp))
+                    
+                    listOf(
+                        "12 Hours" to 12 * 3600000L,
+                        "1 Day" to 24 * 3600000L,
+                        "1 Week" to 7 * 24 * 3600000L,
+                        "1 Month" to 30 * 24 * 3600000L
+                    ).forEach { (label, duration) ->
+                        ActionItem(Icons.Default.HourglassBottom, label) {
+                            onAction("ignore_category:$duration")
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { showIgnoreMenu = false }, Modifier.align(Alignment.CenterHorizontally)) {
+                        Text("← Back", color = colors.textSecondary)
+                    }
+                }
+
                 else -> {
                     Text(notification.title, fontWeight = FontWeight.Black, fontSize = 20.sp, color = colors.textPrimary)
                     Text(appLabel, fontSize = 12.sp, color = colors.textSecondary)
@@ -107,6 +130,8 @@ fun ContextualActionsSheet(
                     }
                     Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
                     ActionItem(Icons.Default.Label, "Change Priority") { showPriorityMenu = true }
+                    Divider(Modifier.padding(vertical = 8.dp), color = colors.glassBorder)
+                    ActionItem(Icons.Default.VisibilityOff, "Ignore Category") { showIgnoreMenu = true }
                 }
             }
         }

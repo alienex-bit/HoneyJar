@@ -5,46 +5,62 @@ import com.honeyjar.app.data.entities.NotificationEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface NotificationDao {
+abstract class NotificationDao {
     @Query("SELECT * FROM notifications ORDER BY postTime DESC")
-    fun getAllNotifications(): Flow<List<NotificationEntity>>
+    abstract fun getAllNotifications(): Flow<List<NotificationEntity>>
+
+    @Query("SELECT * FROM notifications ORDER BY postTime DESC")
+    abstract suspend fun getAllNotificationsOnce(): List<NotificationEntity>
 
     @Query("SELECT * FROM notifications WHERE postTime >= :timestamp ORDER BY postTime DESC")
-    fun getNotificationsSince(timestamp: Long): Flow<List<NotificationEntity>>
+    abstract fun getNotificationsSince(timestamp: Long): Flow<List<NotificationEntity>>
 
-    @Query("SELECT * FROM notifications WHERE isResolved = 0 OR postTime >= :timestamp ORDER BY postTime DESC")
-    fun getHomeNotifications(timestamp: Long): Flow<List<NotificationEntity>>
+    @Query("SELECT * FROM notifications WHERE postTime >= :timestamp ORDER BY postTime DESC")
+    abstract fun getHomeNotifications(timestamp: Long): Flow<List<NotificationEntity>>
 
-@Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertNotification(notification: NotificationEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertNotification(notification: NotificationEntity)
 
     @Query("UPDATE notifications SET isResolved = :isResolved, resolvedAt = :resolvedAtMs WHERE id = :id")
-    suspend fun updateResolvedStatus(id: String, isResolved: Boolean, resolvedAtMs: Long)
+    abstract suspend fun updateResolvedStatus(id: String, isResolved: Boolean, resolvedAtMs: Long)
+
+    /** Non-suspend version for use inside Transaction blocks. */
+    @Query("UPDATE notifications SET isResolved = :isResolved, resolvedAt = :resolvedAtMs WHERE id = :id")
+    abstract fun updateResolvedStatusSync(id: String, isResolved: Boolean, resolvedAtMs: Long)
 
     @Query("UPDATE notifications SET snoozeUntil = :snoozeUntil WHERE id = :id")
-    suspend fun snoozeNotification(id: String, snoozeUntil: Long)
+    abstract suspend fun snoozeNotification(id: String, snoozeUntil: Long)
 
     @Query("DELETE FROM notifications WHERE id = :id")
-    suspend fun deleteNotificationById(id: String)
+    abstract suspend fun deleteNotificationById(id: String)
 
     @Query("DELETE FROM notifications")
-    suspend fun deleteAllNotifications()
+    abstract suspend fun deleteAllNotifications()
 
     @Query("DELETE FROM notifications WHERE postTime < :timestamp")
-    suspend fun deleteOldNotifications(timestamp: Long)
+    abstract suspend fun deleteOldNotifications(timestamp: Long)
 
     @Query("UPDATE notifications SET priority = :priority WHERE id = :id")
-    suspend fun updatePriority(id: String, priority: String)
+    abstract suspend fun updatePriority(id: String, priority: String)
+
+    /** Non-suspend version for use inside Transaction blocks. */
+    @Query("UPDATE notifications SET priority = :priority WHERE id = :id")
+    abstract fun updatePrioritySync(id: String, priority: String)
+
+    @Transaction
+    open fun runInTransaction(block: () -> Unit) {
+        block()
+    }
 
     @Query("UPDATE notifications SET isResolved = 1, resolvedAt = :resolvedAtMs WHERE isResolved = 0")
-    suspend fun resolveAllNotifications(resolvedAtMs: Long)
+    abstract suspend fun resolveAllNotifications(resolvedAtMs: Long)
 
     @Query("SELECT * FROM notifications WHERE id = :id LIMIT 1")
-    suspend fun getById(id: String): NotificationEntity?
+    abstract suspend fun getById(id: String): NotificationEntity?
 
     @Query("UPDATE notifications SET isDismissedByUser = 1, dismissedAt = :at WHERE id = :id AND isResolved = 0")
-    suspend fun markDismissedByUser(id: String, at: Long)
+    abstract suspend fun markDismissedByUser(id: String, at: Long)
 
     @Query("UPDATE notifications SET alertFiredAt = :firedAt WHERE id = :id")
-    suspend fun updateAlertFiredAt(id: String, firedAt: Long)
+    abstract suspend fun updateAlertFiredAt(id: String, firedAt: Long)
 }

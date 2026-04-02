@@ -17,7 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class, AppCategoryEntity::class], version = 10, exportSchema = false)
+@Database(entities = [PriorityGroupEntity::class, NotificationEntity::class, NotificationStatsEntity::class, AppCategoryEntity::class], version = 12, exportSchema = false)
 abstract class HoneyJarDatabase : RoomDatabase() {
     abstract fun priorityGroupDao(): PriorityGroupDao
     abstract fun notificationDao(): NotificationDao
@@ -25,6 +25,45 @@ abstract class HoneyJarDatabase : RoomDatabase() {
     abstract fun appCategoryDao(): AppCategoryDao
 
     companion object {
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE priority_groups ADD COLUMN ignoreUntil INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Ensure system group exists — was missing from migration 8→9
+                db.execSQL("""
+                    INSERT OR IGNORE INTO priority_groups
+                    (key, label, colour, isEnabled, position, soundUri, vibrationPattern,
+                     secondaryAlertEnabled, initialAlertDelayMs, secondaryAlertDelayMs)
+                    VALUES ('system', 'System', '#94a3b8', 1, 13, 'off', 'off', 1, 300000, 1800000)
+                """.trimIndent())
+                // New device sub-categories
+                val newGroups = listOf(
+                    Triple("security",  "Security",  "#f97316"),  // orange
+                    Triple("connected", "Connected", "#06b6d4"),  // cyan
+                    Triple("updates",   "Updates",   "#22c55e"),  // green
+                    Triple("photos",    "Photos",    "#f472b6"),  // pink
+                )
+                newGroups.forEachIndexed { i, (key, label, colour) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO priority_groups
+                        (key, label, colour, isEnabled, position, soundUri, vibrationPattern,
+                         secondaryAlertEnabled, initialAlertDelayMs, secondaryAlertDelayMs)
+                        VALUES ('$key', '$label', '$colour', 1, ${14 + i},
+                                'off', 'off', 1, 300000, 1800000)
+                    """.trimIndent())
+                }
+                // Retire the old catch-all device group
+                db.execSQL("UPDATE priority_groups SET isEnabled = 0 WHERE key = 'device'")
+            }
+        }
+
+        @Volatile
+        private var INSTANCE: HoneyJarDatabase? = null
+
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notifications ADD COLUMN systemActionsJson TEXT")
@@ -104,7 +143,7 @@ abstract class HoneyJarDatabase : RoomDatabase() {
                 newGroups.forEachIndexed { i, (key, label, colour) ->
                     db.execSQL("""
                         INSERT OR IGNORE INTO priority_groups
-                        (key, label, colour, isEnabled, sortOrder, soundUri, vibrationPattern,
+                        (key, label, colour, isEnabled, position, soundUri, vibrationPattern,
                          secondaryAlertEnabled, initialAlertDelayMs, secondaryAlertDelayMs)
                         VALUES ('$key', '$label', '$colour', 1, ${10 + i},
                                 'off', 'off', 1, 300000, 1800000)
@@ -134,7 +173,7 @@ abstract class HoneyJarDatabase : RoomDatabase() {
                     "honeyjar_database"
                 )
                 .addCallback(DatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
@@ -156,19 +195,22 @@ abstract class HoneyJarDatabase : RoomDatabase() {
 
             suspend fun populateDatabase(dao: PriorityGroupDao) {
                 val defaults = listOf(
-                    PriorityGroupEntity(NotificationCategories.URGENT,   "Urgent",   "#ef4444", true,  0),
-                    PriorityGroupEntity(NotificationCategories.MESSAGES, "Messages", "#3b82f6", true,  1),
-                    PriorityGroupEntity(NotificationCategories.SOCIAL,   "Social",   "#ec4899", true,  2),
-                    PriorityGroupEntity(NotificationCategories.EMAIL,    "Email",    "#a855f7", true,  3),
-                    PriorityGroupEntity(NotificationCategories.CALENDAR, "Calendar", "#f59e0b", true,  4),
-                    PriorityGroupEntity(NotificationCategories.CALLS,    "Calls",    "#10b981", true,  5),
-                    PriorityGroupEntity(NotificationCategories.WEATHER,  "Weather",  "#38bdf8", true,  6),
-                    PriorityGroupEntity(NotificationCategories.TRAVEL,   "Travel",   "#f97316", true,  7),
-                    PriorityGroupEntity(NotificationCategories.FINANCE,  "Finance",  "#84cc16", true,  8),
-                    PriorityGroupEntity(NotificationCategories.SHOPPING, "Shopping", "#f43f5e", true,  9),
-                    PriorityGroupEntity(NotificationCategories.MEDIA,    "Media",    "#8b5cf6", true, 10),
-                    PriorityGroupEntity(NotificationCategories.DEVICE,   "Device",   "#64748b", true, 11),
-                    PriorityGroupEntity(NotificationCategories.SYSTEM,   "System",   "#94a3b8", true, 12),
+                    PriorityGroupEntity(NotificationCategories.URGENT,    "Urgent",    "#ef4444", true,  0),
+                    PriorityGroupEntity(NotificationCategories.MESSAGES,  "Messages",  "#3b82f6", true,  1),
+                    PriorityGroupEntity(NotificationCategories.SOCIAL,    "Social",    "#ec4899", true,  2),
+                    PriorityGroupEntity(NotificationCategories.EMAIL,     "Email",     "#a855f7", true,  3),
+                    PriorityGroupEntity(NotificationCategories.CALENDAR,  "Calendar",  "#f59e0b", true,  4),
+                    PriorityGroupEntity(NotificationCategories.CALLS,     "Calls",     "#10b981", true,  5),
+                    PriorityGroupEntity(NotificationCategories.WEATHER,   "Weather",   "#38bdf8", true,  6),
+                    PriorityGroupEntity(NotificationCategories.TRAVEL,    "Travel",    "#f97316", true,  7),
+                    PriorityGroupEntity(NotificationCategories.FINANCE,   "Finance",   "#84cc16", true,  8),
+                    PriorityGroupEntity(NotificationCategories.SHOPPING,  "Shopping",  "#f43f5e", true,  9),
+                    PriorityGroupEntity(NotificationCategories.MEDIA,     "Media",     "#8b5cf6", true, 10),
+                    PriorityGroupEntity(NotificationCategories.SECURITY,  "Security",  "#f97316", true, 11),
+                    PriorityGroupEntity(NotificationCategories.CONNECTED, "Connected", "#06b6d4", true, 12),
+                    PriorityGroupEntity(NotificationCategories.UPDATES,   "Updates",   "#22c55e", true, 13),
+                    PriorityGroupEntity(NotificationCategories.PHOTOS,    "Photos",    "#f472b6", true, 14),
+                    PriorityGroupEntity(NotificationCategories.SYSTEM,    "System",    "#94a3b8", true, 15),
                 )
                 defaults.forEach { dao.insertPriorityGroup(it) }
             }

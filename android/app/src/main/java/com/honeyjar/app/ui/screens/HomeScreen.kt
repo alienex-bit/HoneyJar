@@ -50,18 +50,33 @@ fun HomeScreen(
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     val autoBackupFrequency by viewModel.autoBackupFrequency.collectAsState()
+    val isSmartGrouping by viewModel.isSmartGrouping.collectAsState()
 
     val bNotifications by viewModel.notificationsHome.collectAsState()
     val priorityColors by viewModel.priorityColors.collectAsState()
     val context = LocalContext.current
     val colors = LocalHoneyJarColors.current
 
-    val activeNotifications = remember(bNotifications) {
-        bNotifications.filter { !it.isResolved && it.snoozeUntil < System.currentTimeMillis() }
+    val allPriorityGroups by viewModel.allPriorityGroups.collectAsState()
+
+    val activeNotifications = remember(bNotifications, allPriorityGroups) {
+        val now = System.currentTimeMillis()
+        bNotifications.filter { notif ->
+            val isSnoozed = notif.snoozeUntil > now
+            val group = allPriorityGroups.find { it.key.lowercase() == notif.priority.lowercase() }
+            val isIgnored = group != null && group.ignoreUntil > now
+            val isDisabled = group != null && !group.isEnabled
+            
+            !notif.isResolved && !isSnoozed && !isIgnored && !isDisabled
+        }
     }
 
-    val heroPriorityColors = remember(activeNotifications, priorityColors) {
-        resolvePriorityColors(activeNotifications, priorityColors)
+    val todayTotalNotifications = remember(bNotifications) {
+        bNotifications.filter { it.snoozeUntil < System.currentTimeMillis() }
+    }
+
+    val heroPriorityColors = remember(todayTotalNotifications, priorityColors) {
+        resolvePriorityColors(todayTotalNotifications, priorityColors)
     }
 
     val categories = remember(heroPriorityColors) {
@@ -75,8 +90,15 @@ fun HomeScreen(
 
     val digestGroups = remember(activeNotifications, heroPriorityColors, selectedCategory) {
         val groups = buildDigestGroups(activeNotifications, heroPriorityColors, context)
-        if (selectedCategory == null) groups 
+        if (selectedCategory == null) groups
         else groups.filter { it.category == selectedCategory }
+    }
+
+    // Ungrouped: flat list of individual notifications sorted by time, filtered by category
+    val flatNotifications = remember(activeNotifications, heroPriorityColors, selectedCategory) {
+        val filtered = if (selectedCategory == null) activeNotifications
+                       else activeNotifications.filter { it.priority.lowercase() == selectedCategory }
+        filtered.sortedByDescending { it.postTime }
     }
 
     LazyColumn(
@@ -88,7 +110,7 @@ fun HomeScreen(
             HeaderSection(autoBackupFrequency, onNavigateToSettings)
         }
         item {
-            HeroCard(activeNotifications, heroPriorityColors, snoozedCount = snoozedCount, onReviewClick = { onNavigateToHistory("urgent", null) })
+            HeroCard(todayTotalNotifications, bNotifications, heroPriorityColors, snoozedCount = snoozedCount, onReviewClick = { onNavigateToHistory("urgent", null) })
         }
         if (snoozedCount > 0) {
             item {
@@ -109,51 +131,199 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Today's digest", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = colors.textPrimary)
-                Text("Grouped", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-            }
-        }
-        items(digestGroups) { group ->
-            var showActions by remember { mutableStateOf(false) }
-            val context = LocalContext.current
-            val priorityGroups by viewModel.allPriorityGroups.collectAsState()
-
-            DigestCard(group, onLongPress = { showActions = true })
-
-            if (showActions) {
-                ContextualActionsSheet(
-                    notification = group.latestNotification,
-                    priorityGroups = priorityGroups,
-                    onDismiss = { showActions = false },
-                    onAction = { action ->
-                        when {
-                            action == "open_app" -> {
-                                val pkg = group.primaryPackage
-                                showActions = false
-                                launchApp(context, pkg)
-                            }
-                            action == "resolve" -> {
-                                NotificationRepository.resolveNotification(group.latestNotification.id)
-                                showActions = false
-                            }
-                            action == "unresolve" -> {
-                                NotificationRepository.unresolveNotification(group.latestNotification.id)
-                                showActions = false
-                            }
-                            action.startsWith("change_priority:") -> {
-                                val newPriority = action.removePrefix("change_priority:")
-                                NotificationRepository.changePriority(group.latestNotification.id, newPriority)
-                                showActions = false
-                            }
-                            action.startsWith("snooze:") -> {
-                                val duration = action.removePrefix("snooze:").toLongOrNull() ?: 3600000L
-                                NotificationRepository.snoozeNotification(group.latestNotification.id, duration)
-                                showActions = false
-                            }
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Today's digest", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = colors.textPrimary)
+                    if (activeNotifications.isNotEmpty()) {
+                        Text(
+                            "Mark all read",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            fontFamily = Outfit,
+                            modifier = Modifier
+                                .clickable { NotificationRepository.resolveAllNotifications() }
+                                .padding(vertical = 4.dp, horizontal = 2.dp)
+                        )
                     }
+                }
+                Text(
+                    if (isSmartGrouping) "Grouped" else "All",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
+        }
+        if (isSmartGrouping) {
+            items(digestGroups) { group ->
+                var showActions by remember { mutableStateOf(false) }
+                val context = LocalContext.current
+                val priorityGroups by viewModel.allPriorityGroups.collectAsState()
+
+                DigestCard(
+                    group = group,
+                    onTap = { showActions = true },
+                    onResolve = {
+                        NotificationRepository.resolveGroupNotifications(group.notifications.map { it.id })
+                    }
+                )
+
+                if (showActions) {
+                    ContextualActionsSheet(
+                        notification = group.notifications.first(),
+                        priorityGroups = priorityGroups,
+                        onDismiss = { showActions = false },
+                        onAction = { action ->
+                            when {
+                                action == "open_app" -> {
+                                    launchApp(context, group.packageName)
+                                    showActions = false
+                                }
+                                action == "resolve" -> {
+                                    NotificationRepository.resolveGroupNotifications(group.notifications.map { it.id })
+                                    showActions = false
+                                }
+                                action.startsWith("change_priority:") -> {
+                                    val newPriority = action.removePrefix("change_priority:")
+                                    group.notifications.forEach { NotificationRepository.changePriority(it.id, newPriority) }
+                                    showActions = false
+                                }
+                                action.startsWith("snooze:") -> {
+                                    val duration = action.removePrefix("snooze:").toLongOrNull() ?: 3600000L
+                                    group.notifications.forEach { NotificationRepository.snoozeNotification(it.id, duration) }
+                                    showActions = false
+                                }
+                                action.startsWith("ignore_category:") -> {
+                                    val duration = action.removePrefix("ignore_category:").toLongOrNull() ?: 0L
+                                    viewModel.muteCategory(group.category, duration)
+                                    showActions = false
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        } else {
+            items(flatNotifications) { notif ->
+                var showActions by remember { mutableStateOf(false) }
+                val context = LocalContext.current
+                val priorityGroups by viewModel.allPriorityGroups.collectAsState()
+                val color = ColorUtils.parseHexColor(
+                    heroPriorityColors[notif.priority.lowercase()] ?: "#94a3b8"
+                )
+
+                SingleNotifCard(
+                    notification = notif,
+                    color = color,
+                    onLongPress = { showActions = true }
+                )
+
+                if (showActions) {
+                    ContextualActionsSheet(
+                        notification = notif,
+                        priorityGroups = priorityGroups,
+                        onDismiss = { showActions = false },
+                        onAction = { action ->
+                            when {
+                                action == "open_app" -> {
+                                    launchApp(context, notif.packageName)
+                                    showActions = false
+                                }
+                                action == "resolve" -> {
+                                    NotificationRepository.resolveNotification(notif.id)
+                                    showActions = false
+                                }
+                                action == "unresolve" -> {
+                                    NotificationRepository.unresolveNotification(notif.id)
+                                    showActions = false
+                                }
+                                action.startsWith("change_priority:") -> {
+                                    val newPriority = action.removePrefix("change_priority:")
+                                    NotificationRepository.changePriority(notif.id, newPriority)
+                                    showActions = false
+                                }
+                                action.startsWith("snooze:") -> {
+                                    val duration = action.removePrefix("snooze:").toLongOrNull() ?: 3600000L
+                                    NotificationRepository.snoozeNotification(notif.id, duration)
+                                    showActions = false
+                                }
+                                action.startsWith("ignore_category:") -> {
+                                    val duration = action.removePrefix("ignore_category:").toLongOrNull() ?: 0L
+                                    viewModel.muteCategory(notif.priority.lowercase(), duration)
+                                    showActions = false
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // Action Center: Muted & Disabled Categories
+        val mutedGroups = allPriorityGroups.filter { it.ignoreUntil > System.currentTimeMillis() }
+        val disabledGroups = allPriorityGroups.filter { !it.isEnabled }
+        
+        if (mutedGroups.isNotEmpty() || disabledGroups.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(24.dp))
+                Text("Action center", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = colors.textPrimary)
+                Text("Management for muted or disabled streams", fontSize = 11.sp, color = colors.textSecondary)
+                Spacer(Modifier.height(12.dp))
+            }
+            
+            items(mutedGroups) { group ->
+                ManagementRow(
+                    label = group.label,
+                    status = "Muted",
+                    color = ColorUtils.parseHexColor(group.colour, Color.Gray),
+                    onAction = { viewModel.unmuteCategory(group.key) },
+                    actionLabel = "Unmute"
+                )
+            }
+            
+            items(disabledGroups) { group ->
+                ManagementRow(
+                    label = group.label,
+                    status = "Disabled",
+                    color = ColorUtils.parseHexColor(group.colour, Color.Gray).copy(alpha = 0.4f),
+                    onAction = { viewModel.updatePriorityEnabled(group.key, true) },
+                    actionLabel = "Enable"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ManagementRow(
+    label: String,
+    status: String,
+    color: Color,
+    onAction: () -> Unit,
+    actionLabel: String
+) {
+    val colors = LocalHoneyJarColors.current
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(color, CircleShape))
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(label, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colors.textPrimary)
+                    Text(status, fontSize = 11.sp, color = colors.textSecondary)
+                }
+            }
+            Text(
+                actionLabel,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onAction() }.padding(8.dp)
+            )
         }
     }
 }
@@ -162,14 +332,14 @@ fun HomeScreen(
 fun HeaderSection(autoBackupFrequency: String, onBackupClick: () -> Unit) {
     val colors = LocalHoneyJarColors.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             "HoneyJar",
             fontWeight = FontWeight.Black,
-            fontSize = 33.sp,
+            fontSize = 31.sp,
             fontFamily = PlayfairDisplay,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.primary
@@ -204,18 +374,18 @@ fun AutoBackupStatusPill(frequency: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String, String>, snoozedCount: Int, onReviewClick: () -> Unit = {}) {
-    val totalCount = notifications.size
-    val activeCount = notifications.filter { it.priority.lowercase() == "urgent" && !it.isResolved }.size
+fun HeroCard(displayNotifications: List<HoneyNotification>, allNotifications: List<HoneyNotification>, priorityColors: Map<String, String>, snoozedCount: Int, onReviewClick: () -> Unit = {}) {
+    val totalCount = displayNotifications.size
+    val activeCount = allNotifications.filter { it.priority.lowercase() == "urgent" && !it.isResolved }.size
     val colors = LocalHoneyJarColors.current
 
     GlassCard(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Radial Ring
@@ -223,7 +393,7 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                     modifier = Modifier.size(76.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    val arcs = buildArcs(notifications, priorityColors)
+                    val arcs = buildArcs(displayNotifications, priorityColors)
                     val ringTrack = colors.textPrimary.copy(alpha = 0.07f)
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         drawCircle(color = ringTrack, radius = size.minDimension / 2.5f, style = Stroke(width = 16f))
@@ -250,13 +420,29 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                 }
 
                 // Category Bars
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    priorityColors.forEach { (category, hex) ->
-                        val count = notifications.count { it.priority.lowercase() == category }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    // Show top active categories, ensuring we don't skip the requested core ones
+                    val allCats = priorityColors.keys.toList()
+                    val displayCats = allCats.filter { cat -> 
+                        displayNotifications.any { it.priority.lowercase() == cat } 
+                    }.take(8).toMutableList()
+                    
+                    // Always try to include important filters if they exist in schema and have data
+                    val important = listOf("urgent", "messages", "email", "calendar", "calls", "social", "finance", "shopping")
+                    important.forEach { imp ->
+                        if (allCats.contains(imp) && !displayCats.contains(imp) && displayNotifications.any { it.priority.lowercase() == imp }) {
+                            if (displayCats.size >= 8) displayCats.removeAt(displayCats.size - 1)
+                            displayCats.add(imp)
+                        }
+                    }
+
+                    displayCats.forEach { category ->
+                        val hex = priorityColors[category] ?: "#94a3b8"
+                        val count = displayNotifications.count { it.priority.lowercase() == category }
                         val color = ColorUtils.parseHexColor(hex)
                         val progress = if (totalCount > 0) count.toFloat() / totalCount else 0f
 
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(modifier = Modifier.height(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             Box(Modifier.size(6.dp).background(color, CircleShape))
                             Text(
                                 category.replaceFirstChar { it.uppercase() },
@@ -282,7 +468,7 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                     
                     // Snoozed Row
                     if (snoozedCount > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(modifier = Modifier.height(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             Box(Modifier.size(6.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
                             Text(
                                 "Snoozed",
@@ -308,7 +494,7 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
                 }
             }
 
-            Divider(Modifier.padding(vertical = 10.dp), color = colors.textPrimary.copy(0.07f), thickness = 1.dp)
+            Divider(Modifier.padding(vertical = 6.dp), color = colors.textPrimary.copy(0.07f), thickness = 1.dp)
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 val footerText = if (activeCount > 0) "Action required on $activeCount alerts" else "No urgent alerts at this moment"
@@ -339,14 +525,23 @@ fun HeroCard(notifications: List<HoneyNotification>, priorityColors: Map<String,
 }
 
 private fun categoryEmoji(category: String) = when (category.lowercase()) {
-    "urgent"   -> "🚨"
-    "messages" -> "💬"
-    "email"    -> "✉️"
-    "delivery" -> "📦"
-    "updates"  -> "🚀"
-    "calendar" -> "📅"
-    "system"   -> "⚙️"
-    else       -> "🍯"
+    "urgent"    -> "🚨"
+    "messages"  -> "💬"
+    "social"    -> "🌐"
+    "email"     -> "✉️"
+    "calendar"  -> "📅"
+    "calls"     -> "📞"
+    "weather"   -> "🌦️"
+    "travel"    -> "🚗"
+    "finance"   -> "💰"
+    "shopping"  -> "🛒"
+    "media"     -> "🎬"
+    "security"  -> "🔒"
+    "connected" -> "🔗"
+    "updates"   -> "🔄"
+    "photos"    -> "📸"
+    "system"    -> "⚙️"
+    else        -> "🍯"
 }
 
 @Composable
@@ -467,13 +662,16 @@ fun FilterTab(label: String, emoji: String, isActive: Boolean, categoryColor: Co
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
+fun DigestCard(
+    group: DigestGroup,
+    onTap: () -> Unit,
+    onResolve: () -> Unit
+) {
     val colors = LocalHoneyJarColors.current
-
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = {}, onLongClick = onLongPress),
+            .clickable { onTap() },
         borderColor = group.color.copy(alpha = 0.8f),
         borderWidth = 6.dp
     ) {
@@ -483,7 +681,7 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             AppIcon(
-                packageName = group.primaryPackage,
+                packageName = group.packageName,
                 category = group.category,
                 size = 36.dp,
                 tintColor = group.color
@@ -496,7 +694,7 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        group.sourceApps,
+                        group.appLabel,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textSecondary,
@@ -506,7 +704,7 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
                         modifier = Modifier.weight(1f).padding(end = 6.dp)
                     )
                     Text(
-                        TimeUtils.formatDuration(group.latestTime),
+                        TimeUtils.formatDuration(group.latestNotification.postTime),
                         fontSize = 10.sp,
                         color = colors.textSecondary.copy(0.6f),
                         fontFamily = Outfit,
@@ -515,7 +713,7 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    group.summaryTitle,
+                    group.latestNotification.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = colors.textPrimary,
@@ -537,7 +735,7 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    group.count.toString(),
+                    group.notifications.size.toString(),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -549,8 +747,101 @@ fun DigestCard(group: DigestGroup, onLongPress: () -> Unit = {}) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SingleNotifCard(
+    notification: HoneyNotification,
+    color: Color,
+    onLongPress: () -> Unit = {}
+) {
+    val colors = LocalHoneyJarColors.current
+    val context = LocalContext.current
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress),
+        borderColor = color.copy(alpha = 0.6f),
+        borderWidth = 3.dp  // thinner than DigestCard — less visual weight per item
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            AppIcon(
+                packageName = notification.packageName,
+                category = notification.priority,
+                size = 32.dp,
+                tintColor = color
+            )
+
+            Column(Modifier.weight(1f)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        AppLabelCache.get(notification.packageName, context),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textSecondary,
+                        fontFamily = Outfit,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 6.dp)
+                    )
+                    Text(
+                        TimeUtils.formatDuration(notification.postTime),
+                        fontSize = 10.sp,
+                        color = colors.textSecondary.copy(0.6f),
+                        fontFamily = Outfit,
+                        maxLines = 1
+                    )
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    notification.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = colors.textPrimary,
+                    fontFamily = Outfit,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                if (notification.text.isNotBlank()) {
+                    Text(
+                        notification.text,
+                        fontSize = 12.sp,
+                        color = colors.textSecondary.copy(0.8f),
+                        fontFamily = Outfit,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Category colour dot — replaces the count badge
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(color, CircleShape)
+            )
+        }
+    }
+}
+
 data class CategoryArc(val category: String, val color: Color, val startAngle: Float, val sweepAngle: Float)
-data class DigestGroup(val category: String, val count: Int, val summaryTitle: String, val sourceApps: String, val primaryPackage: String, val latestTime: Long, val color: Color, val latestNotification: HoneyNotification)
+data class DigestGroup(
+    val category: String,
+    val packageName: String,
+    val appLabel: String,
+    val color: Color,
+    val notifications: List<HoneyNotification>
+) {
+    val latestNotification get() = notifications.first()
+}
 
 private fun buildArcs(notifications: List<HoneyNotification>, priorityColors: Map<String, String>): List<CategoryArc> {
     val total = notifications.size.coerceAtLeast(1)
@@ -590,43 +881,64 @@ private fun resolvePriorityColors(
     }
 
     return linkedMapOf(
-        NotificationCategories.URGENT to defaultColorForCategory(NotificationCategories.URGENT),
-        NotificationCategories.MESSAGES to defaultColorForCategory(NotificationCategories.MESSAGES),
-        NotificationCategories.CALENDAR to defaultColorForCategory(NotificationCategories.CALENDAR),
-        NotificationCategories.EMAIL to defaultColorForCategory(NotificationCategories.EMAIL),
-        NotificationCategories.UPDATES to defaultColorForCategory(NotificationCategories.UPDATES),
-        NotificationCategories.DELIVERY to defaultColorForCategory(NotificationCategories.DELIVERY)
+        NotificationCategories.URGENT    to defaultColorForCategory(NotificationCategories.URGENT),
+        NotificationCategories.MESSAGES  to defaultColorForCategory(NotificationCategories.MESSAGES),
+        NotificationCategories.SOCIAL    to defaultColorForCategory(NotificationCategories.SOCIAL),
+        NotificationCategories.EMAIL     to defaultColorForCategory(NotificationCategories.EMAIL),
+        NotificationCategories.CALENDAR  to defaultColorForCategory(NotificationCategories.CALENDAR),
+        NotificationCategories.CALLS     to defaultColorForCategory(NotificationCategories.CALLS),
+        NotificationCategories.WEATHER   to defaultColorForCategory(NotificationCategories.WEATHER),
+        NotificationCategories.TRAVEL    to defaultColorForCategory(NotificationCategories.TRAVEL),
+        NotificationCategories.FINANCE   to defaultColorForCategory(NotificationCategories.FINANCE),
+        NotificationCategories.SHOPPING  to defaultColorForCategory(NotificationCategories.SHOPPING),
+        NotificationCategories.MEDIA     to defaultColorForCategory(NotificationCategories.MEDIA),
+        NotificationCategories.SECURITY  to defaultColorForCategory(NotificationCategories.SECURITY),
+        NotificationCategories.CONNECTED to defaultColorForCategory(NotificationCategories.CONNECTED),
+        NotificationCategories.UPDATES   to defaultColorForCategory(NotificationCategories.UPDATES),
+        NotificationCategories.PHOTOS    to defaultColorForCategory(NotificationCategories.PHOTOS),
+        NotificationCategories.SYSTEM    to defaultColorForCategory(NotificationCategories.SYSTEM)
     )
 }
 
 private fun defaultColorForCategory(category: String): String {
     return when (category.lowercase()) {
-        NotificationCategories.URGENT -> "#ef4444"
-        NotificationCategories.MESSAGES -> "#3b82f6"
-        NotificationCategories.CALENDAR -> "#f59e0b"
-        NotificationCategories.EMAIL -> "#a855f7"
-        NotificationCategories.UPDATES -> "#22c55e"
-        NotificationCategories.DELIVERY -> "#fbbf24"
-        NotificationCategories.SYSTEM -> "#94a3b8"
+        NotificationCategories.URGENT    -> "#ef4444"
+        NotificationCategories.MESSAGES  -> "#3b82f6"
+        NotificationCategories.SOCIAL    -> "#ec4899"
+        NotificationCategories.EMAIL     -> "#a855f7"
+        NotificationCategories.CALENDAR  -> "#f59e0b"
+        NotificationCategories.CALLS     -> "#10b981"
+        NotificationCategories.WEATHER   -> "#38bdf8"
+        NotificationCategories.TRAVEL    -> "#f97316"
+        NotificationCategories.FINANCE   -> "#84cc16"
+        NotificationCategories.SHOPPING  -> "#f43f5e"
+        NotificationCategories.MEDIA     -> "#8b5cf6"
+        NotificationCategories.SECURITY  -> "#f97316"
+        NotificationCategories.CONNECTED -> "#06b6d4"
+        NotificationCategories.UPDATES   -> "#22c55e"
+        NotificationCategories.PHOTOS    -> "#f472b6"
+        NotificationCategories.SYSTEM    -> "#94a3b8"
         else -> "#94a3b8"
     }
 }
 
 private fun buildDigestGroups(notifications: List<HoneyNotification>, priorityColors: Map<String, String>, context: Context): List<DigestGroup> {
-    val grouped = notifications.groupBy { it.priority.lowercase() }
-    return priorityColors.entries.mapNotNull { (key, hex) ->
-        val group = grouped[key]?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-        DigestGroup(
-            category = key,
-            count = group.size,
-            summaryTitle = buildSummaryTitle(group),
-            sourceApps = buildSourceApps(group, context),
-            primaryPackage = group.first().packageName,
-            latestTime = group.maxOf { it.postTime },
-            color = ColorUtils.parseHexColor(hex),
-            latestNotification = group.maxByOrNull { it.postTime } ?: group.first()
-        )
-    }.sortedWith(compareByDescending<DigestGroup> { it.category == "urgent" }.thenByDescending { it.latestTime })
+    val groupedByCategory = notifications.groupBy { it.priority.lowercase() }
+    
+    return groupedByCategory.flatMap { (category, catNotifs) ->
+        val color = ColorUtils.parseHexColor(priorityColors[category] ?: defaultColorForCategory(category))
+        
+        // Group by package within each category
+        catNotifs.groupBy { it.packageName }.map { (pkg, pkgNotifs) ->
+            DigestGroup(
+                category = category,
+                packageName = pkg,
+                appLabel = AppLabelCache.get(pkg, context),
+                color = color,
+                notifications = pkgNotifs.sortedByDescending { it.postTime }
+            )
+        }
+    }.sortedByDescending { it.latestNotification.postTime }
 }
 
 private fun buildSummaryTitle(group: List<HoneyNotification>): String {

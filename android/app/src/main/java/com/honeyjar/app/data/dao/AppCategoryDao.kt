@@ -18,4 +18,7 @@ interface AppCategoryDao {
 
     @Query("SELECT COUNT(*) FROM app_category_cache")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM app_category_cache")
+    suspend fun getAll(): List<AppCategoryEntity>
 }

@@ -67,8 +67,6 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
     val priorityGroups by viewModel.allPriorityGroups.collectAsState()
     
     val isSmartGrouping by SettingsRepository.isSmartGroupingEnabled(context).collectAsState(true)
-    val isPriorityFiltering by SettingsRepository.isPriorityFilteringEnabled(context).collectAsState(true)
-    val isFocusMode by SettingsRepository.isFocusModeEnabled(context).collectAsState(false)
     val isCaptureOngoing by SettingsRepository.isCaptureOngoingEnabled(context).collectAsState(false)
     val isProEnabled by SettingsRepository.isProEnabled(context).collectAsState(false)
     val isSecondaryAlerts by viewModel.secondaryAlertsEnabled.collectAsState()
@@ -80,14 +78,14 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 80.dp, start = 20.dp, end = 20.dp, top = 2.dp),
+            contentPadding = PaddingValues(bottom = 80.dp, start = 20.dp, end = 20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
                 Text(
                     text = "Settings", 
                     fontWeight = FontWeight.Black, 
-                    fontSize = 36.sp, 
+                    fontSize = 31.sp, 
                     fontFamily = PlayfairDisplay,
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                     style = androidx.compose.ui.text.TextStyle(
@@ -118,23 +116,11 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
                         SettingsToggleItem(Icons.Default.Notifications, "Smart grouping", "Bundle similar notifications", isSmartGrouping) { 
                             scope.launch { SettingsRepository.setSmartGrouping(context, it) }
                         }
-                        SettingsToggleItem(Icons.Default.FlashOn, "Priority filtering", "Highlight urgent items", isPriorityFiltering) { 
-                            scope.launch { SettingsRepository.setPriorityFiltering(context, it) }
-                        }
-                        SettingsToggleItem(Icons.Default.RemoveRedEye, "Focus mode", "Only show critical alerts", isFocusMode) { 
-                            scope.launch { SettingsRepository.setFocusMode(context, it) }
-                        }
-                        SettingsToggleItem(Icons.Default.NotificationsActive, "Capture ongoing alerts", "Calls, music, VPN, navigation & other persistent alerts", isCaptureOngoing) {
+                        SettingsToggleItem(Icons.Default.NotificationsActive, "Capture ongoing alerts", "Persistent notifications e.g. VPN, AdGuard, Android Auto", isCaptureOngoing) {
                             scope.launch { SettingsRepository.setCaptureOngoing(context, it) }
                         }
                         SettingsToggleItem(Icons.Default.Alarm, "Secondary alerts", "Re-alert for dismissed unresolved notifications", isSecondaryAlerts) {
                             viewModel.setSecondaryAlertsEnabled(it)
-                        }
-                        SettingsArrowItem(Icons.Default.VolumeUp, "Sound & vibration", "On") {
-                            val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            }
-                            context.startActivity(intent)
                         }
                     }
                 }
@@ -151,10 +137,14 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         priorityGroups.forEach { group ->
                             val isSystemGroup = group.key in setOf(
-                                NotificationCategories.URGENT, NotificationCategories.MESSAGES,
-                                NotificationCategories.CALENDAR, NotificationCategories.EMAIL,
-                                NotificationCategories.UPDATES, NotificationCategories.DELIVERY,
-                                NotificationCategories.SYSTEM
+                                NotificationCategories.URGENT,    NotificationCategories.MESSAGES,
+                                NotificationCategories.SOCIAL,    NotificationCategories.EMAIL,
+                                NotificationCategories.CALENDAR,  NotificationCategories.CALLS,
+                                NotificationCategories.WEATHER,   NotificationCategories.TRAVEL,
+                                NotificationCategories.FINANCE,   NotificationCategories.SHOPPING,
+                                NotificationCategories.MEDIA,     NotificationCategories.SECURITY,
+                                NotificationCategories.CONNECTED, NotificationCategories.UPDATES,
+                                NotificationCategories.PHOTOS,    NotificationCategories.SYSTEM
                             )
                             PriorityRow(
                                 group = group,
@@ -181,6 +171,9 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
             item {
                 SettingsGroup("BACKUP & RESTORE") {
                     BackupSection(viewModel)
+                }
+                SettingsGroup("MAINTENANCE") {
+                    MaintenanceSection(viewModel)
                 }
             }
         }
@@ -230,7 +223,6 @@ fun SettingsScreen(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThem
 
 @Composable
 fun SettingsGroup(title: String, content: @Composable () -> Unit) {
-    val colors = LocalHoneyJarColors.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = title, 
@@ -291,16 +283,16 @@ fun ProBannerHighFi(isPro: Boolean, onUpgrade: () -> Unit) {
 @Composable
 fun ThemeSelectorGridHighFi(currentTheme: HoneyJarThemeType, onThemeChange: (HoneyJarThemeType) -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppearancePill(Modifier.weight(1f), "Dark Amber", Color(0xFFFFB300), currentTheme == HoneyJarThemeType.DarkHoney) { onThemeChange(HoneyJarThemeType.DarkHoney) }
-            AppearancePill(Modifier.weight(1f), "Dark Obsidian", Color(0xFF7C4DFF), currentTheme == HoneyJarThemeType.Midnight) { onThemeChange(HoneyJarThemeType.Midnight) }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppearancePill(Modifier.weight(1f), "Dark Amber",    Color(0xFFFFB300), currentTheme == HoneyJarThemeType.DarkHoney)    { onThemeChange(HoneyJarThemeType.DarkHoney) }
+            AppearancePill(Modifier.weight(1f), "Dark Obsidian", Color(0xFFA57EFF), currentTheme == HoneyJarThemeType.Midnight)      { onThemeChange(HoneyJarThemeType.Midnight) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppearancePill(Modifier.weight(1f), "Light Cream", Color(0xFFD49A00), currentTheme == HoneyJarThemeType.LightCream) { onThemeChange(HoneyJarThemeType.LightCream) }
-            AppearancePill(Modifier.weight(1f), "Light Minimal", Color(0xFF0076FF), currentTheme == HoneyJarThemeType.LightMinimal) { onThemeChange(HoneyJarThemeType.LightMinimal) }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppearancePill(Modifier.weight(1f), "Light Cream",   Color(0xFF8B6700), currentTheme == HoneyJarThemeType.LightCream)   { onThemeChange(HoneyJarThemeType.LightCream) }
+            AppearancePill(Modifier.weight(1f), "Light Minimal", Color(0xFF0062D6), currentTheme == HoneyJarThemeType.LightMinimal) { onThemeChange(HoneyJarThemeType.LightMinimal) }
         }
     }
 }
@@ -308,42 +300,42 @@ fun ThemeSelectorGridHighFi(currentTheme: HoneyJarThemeType, onThemeChange: (Hon
 @Composable
 fun AppearancePill(modifier: Modifier, name: String, color: Color, isSelected: Boolean, onClick: () -> Unit) {
     val colors = LocalHoneyJarColors.current
-    val borderColor = if (isSelected) colors.accent else colors.glassBorder
-    val borderWidth = if (isSelected) 2.5.dp else 1.dp
-    
+    // Border and background use the pill's own colour, not the current theme accent
+    val borderColor = if (isSelected) color else colors.glassBorder
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+
     Surface(
-        modifier = modifier
-            .height(56.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) colors.accent.copy(alpha = 0.12f) else colors.itemBg,
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) color.copy(alpha = 0.12f) else colors.itemBg,
         border = androidx.compose.foundation.BorderStroke(borderWidth, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Box(
                 Modifier
-                    .size(20.dp)
-                    .background(color, RoundedCornerShape(6.dp))
-                    .border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(6.dp))
+                    .size(14.dp)
+                    .background(color, CircleShape)
             )
             Text(
-                name, 
-                fontSize = 12.sp, 
-                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold, 
+                name,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = if (isSelected) colors.textPrimary else colors.textPrimary.copy(alpha = 0.7f),
                 fontFamily = Outfit,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
             if (isSelected) {
                 Icon(
-                    Icons.Default.CheckCircle, 
-                    contentDescription = null, 
-                    tint = colors.accent, 
-                    modifier = Modifier.size(16.dp)
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }
@@ -445,14 +437,23 @@ fun PriorityRow(
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(group.label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
-            val hint = when(group.key) {
-                "urgent" -> "Payment alerts, system warnings"
-                "messages" -> "WhatsApp, Slack, SMS"
-                "calendar" -> "Calendar, Reminders, Events"
-                "email" -> "Gmail, Outlook, Mail"
-                "updates" -> "App Store, system updates"
-                "delivery" -> "Amazon, couriers, parcels"
-                "system" -> "Android, storage, battery"
+            val hint = when (group.key) {
+                "urgent"    -> "Fraud alerts, security warnings"
+                "messages"  -> "WhatsApp, Telegram, Signal, SMS"
+                "social"    -> "Twitter, Instagram, Reddit, LinkedIn"
+                "email"     -> "Gmail, Outlook, EasilyDo Mail"
+                "calendar"  -> "Samsung Calendar, Google Calendar"
+                "calls"     -> "Dialler, call logs"
+                "weather"   -> "Weather Pro, Windy, Lightning Tracker"
+                "travel"    -> "Uber, Waze, Android Auto, Maps"
+                "finance"   -> "Revolut, SafePal, Google Wallet"
+                "shopping"  -> "Amazon, Next, Blue Light Card"
+                "media"     -> "YouTube, CapCut, Google News, games"
+                "security"  -> "AdGuard, Surfshark, Device Security"
+                "connected" -> "Link to Windows, Galaxy Watch, SmartThings"
+                "updates"   -> "Play Store, Galaxy Store, FOTA, Firefox"
+                "photos"    -> "Camera, Google Photos, Samsung Cloud"
+                "system"    -> "SystemUI, charging, alarms, OS noise"
                 else -> "Custom apps group"
             }
             Text(hint, fontSize = 11.sp, color = colors.textSecondary)
@@ -746,6 +747,178 @@ fun BackupSection(viewModel: MainViewModel) {
 }
 
 @Composable
+fun MaintenanceSection(viewModel: MainViewModel) {
+    val scope = rememberCoroutineScope()
+    val colors = LocalHoneyJarColors.current
+    var isRunning by remember { mutableStateOf(false) }
+    var resultText by remember { mutableStateOf<String?>(null) }
+    var showConfirm by remember { mutableStateOf(false) }
+
+    var isColoursRunning by remember { mutableStateOf(false) }
+    var coloursResultText by remember { mutableStateOf<String?>(null) }
+    var showColoursConfirm by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Recategorise button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Recategorise history",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    fontFamily = Outfit
+                )
+                Text(
+                    resultText ?: "Re-run categoriser over all stored notifications",
+                    fontSize = 11.sp,
+                    color = if (resultText != null) MaterialTheme.colorScheme.primary
+                            else colors.textSecondary,
+                    fontFamily = Outfit
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Button(
+                onClick = { showConfirm = true },
+                enabled = !isRunning,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                if (isRunning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text("Run", fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = Outfit)
+                }
+            }
+        }
+
+        // Reset colour alignment button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Reset category colours",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    fontFamily = Outfit
+                )
+                Text(
+                    coloursResultText ?: "Restore all category colours to their defaults",
+                    fontSize = 11.sp,
+                    color = if (coloursResultText != null) MaterialTheme.colorScheme.primary
+                            else colors.textSecondary,
+                    fontFamily = Outfit
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Button(
+                onClick = { showColoursConfirm = true },
+                enabled = !isColoursRunning,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                if (isColoursRunning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text("Run", fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = Outfit)
+                }
+            }
+        }
+    }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Recategorise history?", fontFamily = PlayfairDisplay) },
+            text = {
+                Text(
+                    "This will re-run the categoriser over all your stored notifications and update any that are miscategorised. It won't delete anything.",
+                    fontFamily = Outfit,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showConfirm = false
+                    isRunning = true
+                    resultText = null
+                    scope.launch {
+                        val (total, updated) = viewModel.recategorizeAll()
+                        isRunning = false
+                        resultText = if (updated == 0) "Already up to date ($total checked)"
+                                     else "Done — $updated of $total updated"
+                    }
+                }) {
+                    Text("Recategorise", fontFamily = Outfit, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) {
+                    Text("Cancel", fontFamily = Outfit)
+                }
+            }
+        )
+    }
+
+    if (showColoursConfirm) {
+        AlertDialog(
+            onDismissRequest = { showColoursConfirm = false },
+            title = { Text("Reset category colours?", fontFamily = PlayfairDisplay) },
+            text = {
+                Text(
+                    "This will restore all 16 built-in category colours to their defaults. Any colours you've customised will be overwritten. Custom categories are not affected.",
+                    fontFamily = Outfit,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showColoursConfirm = false
+                    isColoursRunning = true
+                    coloursResultText = null
+                    scope.launch {
+                        val count = viewModel.resetCategoryColours()
+                        isColoursRunning = false
+                        coloursResultText = "Done — $count colours reset to defaults"
+                    }
+                }) {
+                    Text("Reset colours", fontFamily = Outfit, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showColoursConfirm = false }) {
+                    Text("Cancel", fontFamily = Outfit)
+                }
+            }
+        )
+    }
+}
+
+@Composable
 fun SoundProfileSheet(
     group: PriorityGroupEntity,
     onSoundSelected: (String) -> Unit,
@@ -770,7 +943,12 @@ fun SoundProfileSheet(
 
     val ringtoneLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
             if (uri != null) {
                 currentSound = uri.toString()
                 onSoundSelected(uri.toString())
@@ -779,7 +957,11 @@ fun SoundProfileSheet(
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black.copy(0.7f)).clickable { onDismiss() }, contentAlignment = Alignment.BottomCenter) {
-        GlassCard(modifier = Modifier.fillMaxWidth().wrapContentHeight().clickable(enabled = false) {}) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().wrapContentHeight().clickable(enabled = false) {},
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
             Column(Modifier.padding(28.dp)) {
                 Text("Sound & Vibration", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = PlayfairDisplay, color = colors.textPrimary)
                 Text(group.label, fontSize = 14.sp, color = colors.textSecondary, fontFamily = Outfit)
@@ -976,50 +1158,94 @@ fun SoundProfileSheet(
 fun ColorPickerOverlay(group: PriorityGroupEntity, onColorSelected: (String) -> Unit, onDismiss: () -> Unit) {
     val colors = LocalHoneyJarColors.current
     Box(Modifier.fillMaxSize().background(Color.Black.copy(0.7f)).clickable { onDismiss() }, contentAlignment = Alignment.BottomCenter) {
-        GlassCard(
-            modifier = Modifier.fillMaxWidth().height(400.dp).clickable(enabled = false) { },
-            borderColor = Color(android.graphics.Color.parseColor(group.colour))
+        Surface(
+            modifier = Modifier.fillMaxWidth().wrapContentHeight().clickable(enabled = false) { },
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(android.graphics.Color.parseColor(group.colour)).copy(alpha = 0.6f))
         ) {
-            Column(Modifier.padding(28.dp)) {
-                Text("Choose colour", fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = PlayfairDisplay)
-                Text("Editing: ${group.label}", fontSize = 14.sp, color = colors.textSecondary, fontFamily = Outfit)
-                
-                Spacer(Modifier.height(32.dp))
-                
+            Column(Modifier.padding(24.dp)) {
+                Text("Choose colour", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = PlayfairDisplay, color = colors.textPrimary)
+                Text("Editing: ${group.label}", fontSize = 13.sp, color = colors.textSecondary, fontFamily = Outfit)
+
+                Spacer(Modifier.height(20.dp))
+
+                // Show currently selected colour
+                val currentHex = group.colour
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(bottom = 20.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(28.dp)
+                            .background(
+                                try { Color(android.graphics.Color.parseColor(currentHex)) }
+                                catch (_: Exception) { MaterialTheme.colorScheme.primary },
+                                CircleShape
+                            )
+                    )
+                    Text(
+                        "Current: $currentHex",
+                        fontSize = 11.sp,
+                        color = colors.textSecondary,
+                        fontFamily = Outfit
+                    )
+                }
+
+                // 30 swatches covering all 16 category defaults + extras, in 6-column grid
                 val swatches = listOf(
-                    "#ef4444", "#f97316", "#f59e0b", "#eab308",
-                    "#84cc16", "#22c55e", "#10b981", "#06b6d4",
-                    "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7",
-                    "#d946ef", "#ec4899"
+                    // Reds / pinks
+                    "#ef4444", "#f43f5e", "#ec4899", "#f472b6", "#d946ef", "#a855f7",
+                    // Purples / blues
+                    "#8b5cf6", "#6366f1", "#3b82f6", "#0062d6", "#06b6d4", "#38bdf8",
+                    // Greens
+                    "#10b981", "#22c55e", "#84cc16", "#a3e635", "#eab308", "#f59e0b",
+                    // Oranges / reds
+                    "#f97316", "#fb923c", "#f97316", "#dc2626", "#b91c1c", "#7f1d1d",
+                    // Neutrals / slate
+                    "#94a3b8", "#64748b", "#475569", "#334155", "#1e293b", "#0f172a"
                 )
-                
-                // 14 colors in a 7-column grid
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    repeat(2) { row ->
-                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            repeat(7) { col ->
-                                val hex = swatches[row * 7 + col]
+                val cols = 6
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    swatches.chunked(cols).forEach { rowSwatches ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            rowSwatches.forEach { hex ->
+                                val isSelected = hex.equals(currentHex, ignoreCase = true)
                                 Box(
                                     Modifier
                                         .size(36.dp)
-                                        .background(Color(android.graphics.Color.parseColor(hex)), CircleShape)
+                                        .background(
+                                            try { Color(android.graphics.Color.parseColor(hex)) }
+                                            catch (_: Exception) { Color.Gray },
+                                            CircleShape
+                                        )
+                                        .then(
+                                            if (isSelected) Modifier.border(3.dp, Color.White, CircleShape)
+                                            else Modifier
+                                        )
                                         .clickable { onColorSelected(hex) }
                                 )
                             }
                         }
                     }
                 }
-                
-                Spacer(Modifier.weight(1f))
-                
+
+                Spacer(Modifier.height(20.dp))
+
                 Button(
                     onClick = { onDismiss() },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, colors.glassBorder)
                 ) {
-                    Text("Done", fontWeight = FontWeight.Bold)
+                    Text("Done", fontWeight = FontWeight.Bold, color = colors.textPrimary, fontFamily = Outfit)
                 }
             }
         }
@@ -1096,5 +1322,9 @@ fun AddCustomGroupOverlay(onAdd: (String, String) -> Unit, onDismiss: () -> Unit
         }
     }
 }
+
+
+
+
 
 

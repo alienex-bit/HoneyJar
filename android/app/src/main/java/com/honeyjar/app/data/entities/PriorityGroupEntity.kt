@@ -14,5 +14,6 @@ data class PriorityGroupEntity(
     val vibrationPattern: String = "off", // "off" | "short" | "double" | "long" | "urgent"
     val secondaryAlertEnabled: Boolean = true,
     val initialAlertDelayMs: Long = 300_000L,    // 5 min — delay before first alert after dismissal
-    val secondaryAlertDelayMs: Long = 1_800_000L // 30 min — repeat interval (0 = no repeat)
+    val secondaryAlertDelayMs: Long = 1_800_000L, // 30 min — repeat interval (0 = no repeat)
+    val ignoreUntil: Long = 0L
 )

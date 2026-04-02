@@ -50,4 +50,37 @@ class PriorityRepository(val dao: PriorityGroupDao) {
     suspend fun updateSecondaryAlertDelayMs(key: String, delayMs: Long) {
         dao.updateSecondaryAlertDelayMs(key, delayMs)
     }
+
+    /** Resets all built-in category colours back to their intended defaults. */
+    suspend fun resetCategoryColours(): Int {
+        val defaults = mapOf(
+            "urgent"    to "#ef4444",
+            "messages"  to "#3b82f6",
+            "social"    to "#ec4899",
+            "email"     to "#a855f7",
+            "calendar"  to "#f59e0b",
+            "calls"     to "#10b981",
+            "weather"   to "#38bdf8",
+            "travel"    to "#f97316",
+            "finance"   to "#84cc16",
+            "shopping"  to "#f43f5e",
+            "media"     to "#8b5cf6",
+            "security"  to "#f97316",
+            "connected" to "#06b6d4",
+            "updates"   to "#22c55e",
+            "photos"    to "#f472b6",
+            "system"    to "#94a3b8"
+        )
+        defaults.forEach { (key, colour) -> dao.updateColour(key, colour) }
+        return defaults.size
+    }
+
+    suspend fun muteCategory(key: String, durationMs: Long) {
+        val until = System.currentTimeMillis() + durationMs
+        dao.updateIgnoreUntil(key, until)
+    }
+
+    suspend fun unmuteCategory(key: String) {
+        dao.updateIgnoreUntil(key, 0L)
+    }
 }

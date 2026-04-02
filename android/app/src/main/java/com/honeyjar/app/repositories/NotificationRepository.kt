@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.honeyjar.app.utils.AppCategoryResolver
+import com.honeyjar.app.utils.NotificationCategories
 import com.honeyjar.app.utils.TimeUtils
 import org.json.JSONArray
 import java.util.Calendar
@@ -68,13 +71,24 @@ object NotificationRepository {
     private fun getHourBucket(timestamp: Long): Int {
         val cal = Calendar.getInstance()
         cal.timeInMillis = timestamp
-        return cal.get(Calendar.HOUR_OF_DAY) / 2
+        return cal.get(Calendar.HOUR_OF_DAY) / 3
     }
 
     fun resolveNotification(id: String) {
         scope.launch {
             val now = System.currentTimeMillis()
             dao?.updateResolvedStatus(id, true, now)
+        }
+    }
+
+    fun resolveGroupNotifications(ids: List<String>) {
+        scope.launch {
+            val now = System.currentTimeMillis()
+            dao?.runInTransaction {
+                ids.forEach { id ->
+                    dao?.updateResolvedStatusSync(id, true, now)
+                }
+            }
         }
     }
 
@@ -113,6 +127,38 @@ object NotificationRepository {
         scope.launch {
             dao?.deleteAllNotifications()
         }
+    }
+
+    /**
+     * Re-runs the static categoriser over every notification in the database and
+     * updates any whose priority has changed. Only touches rows where the category
+     * would actually change — so it's safe to run multiple times.
+     *
+     * Uses AppCategoryResolver.categorizeStatic() which is pure/CPU-only (no network,
+     * no PackageManager) so it's fast enough to run over thousands of rows.
+     *
+     * Returns a pair of (total rows examined, rows updated).
+     */
+    suspend fun recategorizeAll(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val currentDao = dao ?: return@withContext 0 to 0
+        val all = currentDao.getAllNotificationsOnce()
+        var updated = 0
+        // Single transaction: all 15k+ updates commit at once instead of one-by-one.
+        // This is ~50x faster and avoids hammering the main thread.
+        currentDao.runInTransaction {
+            all.forEach { entity ->
+                val newCat = AppCategoryResolver.categorizeStatic(
+                    entity.packageName, entity.title, entity.text
+                ) ?: NotificationCategories.SYSTEM
+                if (newCat != entity.priority) {
+                    // updatePrioritySync is a non-suspend @Query used inside transactions
+                    currentDao.updatePrioritySync(entity.id, newCat)
+                    updated++
+                }
+            }
+        }
+        android.util.Log.i("HoneyJar-Recategorize", "Examined ${all.size}, updated $updated")
+        all.size to updated
     }
 
     fun resolveAllNotifications() {

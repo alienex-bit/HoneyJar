@@ -44,4 +44,7 @@ interface PriorityGroupDao {
 
     @Query("UPDATE priority_groups SET secondaryAlertDelayMs = :delayMs WHERE `key` = :key")
     suspend fun updateSecondaryAlertDelayMs(key: String, delayMs: Long)
+
+    @Query("UPDATE priority_groups SET ignoreUntil = :until WHERE `key` = :key")
+    suspend fun updateIgnoreUntil(key: String, until: Long)
 }

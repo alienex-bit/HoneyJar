@@ -22,6 +22,7 @@ import com.honeyjar.app.ui.screens.HomeScreen
 import com.honeyjar.app.ui.screens.HistoryScreen
 import com.honeyjar.app.ui.screens.StatsScreen
 import com.honeyjar.app.ui.screens.SettingsScreen
+import com.honeyjar.app.ui.screens.AIScreen
 import com.honeyjar.app.ui.screens.OnboardingScreen
 import com.honeyjar.app.ui.theme.HoneyJarTheme
 import com.honeyjar.app.ui.theme.HoneyJarThemeType
@@ -41,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.honeyjar.app.ui.screens.OnboardingMode
+import com.honeyjar.app.utils.AppCategoryResolver
 
 class MainActivity : FragmentActivity() {
     private val database by lazy { HoneyJarDatabase.getDatabase(this) }
@@ -51,10 +53,15 @@ class MainActivity : FragmentActivity() {
         ThemePrefs.initialize(this)
         NotificationRepository.initialize(database.notificationDao(), database.statsDao())
 
-        // Pre-warm app label cache on IO thread so first tab visit has labels ready.
+        // Pre-warm caches and ensure history categories are up to date with new schema.
         val appContext = applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             val notifications = NotificationRepository.notifications.first()
+            
+            // Fix categories for existing history (e.g. after adding social/finance)
+            AppCategoryResolver.ensureCategoriesExist(repository)
+            NotificationRepository.recategorizeAll()
+
             notifications.map { it.packageName }.distinct()
                 .forEach {
                     AppLabelCache.get(it, appContext)
@@ -108,6 +115,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Onboarding : Screen("onboarding", "Onboarding", null)
     object Home : Screen("home", "Home", Icons.Filled.Home)
     object History : Screen("history", "History", Icons.Filled.History)
+    object AI : Screen("ai", "AI", Icons.Filled.AutoAwesome)
     object Stats : Screen("stats", "Stats", Icons.Filled.Assessment)
     object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
 }
@@ -133,7 +141,7 @@ fun MainAppScaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     tonalElevation = 8.dp
                 ) {
-                    val items = listOf(Screen.Home, Screen.History, Screen.Stats, Screen.Settings)
+                    val items = listOf(Screen.Home, Screen.History, Screen.AI, Screen.Stats, Screen.Settings)
                     items.forEach { screen ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon!!, contentDescription = screen.title) },
@@ -196,10 +204,11 @@ fun MainAppScaffold(
                 val status = backStackEntry.arguments?.getString("status")
                 HistoryScreen(viewModel, filter, status)
             }
+            composable(Screen.AI.route) {
+                AIScreen(viewModel)
+            }
             composable(Screen.Stats.route) { StatsScreen(viewModel) }
             composable(Screen.Settings.route) { SettingsScreen(currentTheme, onThemeChange, viewModel) }
         }
     }
 }
-
-

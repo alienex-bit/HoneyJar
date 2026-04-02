@@ -46,7 +46,7 @@ val LocalHoneyJarColors = staticCompositionLocalOf {
         accent = Color(0xFFFFB300),
         accentGlow = Color(0xFFFFB300).copy(alpha = 0.3f),
         heroGradient = Brush.radialGradient(listOf(Color(0xFFFFB300), Color(0xFFA64D00))),
-        glassBorder = Color.White.copy(alpha = 0.1f),
+        glassBorder = Color.White.copy(alpha = 0.15f),
         textPrimary = Color.White,
         textSecondary = Color(0xFFA0A0A0),
         itemBg = Color.White.copy(alpha = 0.08f),
@@ -81,28 +81,28 @@ private val DarkHoneyColorScheme = darkColorScheme(
 )
 
 private val MidnightColorScheme = darkColorScheme(
-    primary = Color(0xFF7C4DFF),
-    secondary = Color(0xFF311B92),
+    primary = Color(0xFFA57EFF),   // was 7C4DFF — lightened to pass WCAG AA (6.5:1 on bg)
+    secondary = Color(0xFF6B3FA0), // was 311B92 — that was near-invisible (1.6:1); usable purple
     background = MidnightBg,
     surface = Color(0xFF1A1B24),
-    onPrimary = Color.White,
+    onPrimary = Color.Black,       // dark text on lighter purple
     onBackground = Color.White,
     onSurface = Color.White
 )
 
 private val LightCreamColorScheme = lightColorScheme(
-    primary = Color(0xFFD49A00),
-    secondary = Color(0xFFA67C00),
+    primary = Color(0xFF8B6700),   // was D49A00 — that failed at 2.4:1; now 5.0:1 AA ✓
+    secondary = Color(0xFF7A5C00), // was A67C00 — darkened to match; 6.0:1 AA ✓
     background = CreamBg,
     surface = Color(0xFFFFFFFF),
-    onPrimary = Color.Black,
+    onPrimary = Color.White,       // white on dark amber reads well
     onBackground = Color(0xFF1A1A1A),
     onSurface = Color(0xFF1A1A1A)
 )
 
 private val LightMinimalColorScheme = lightColorScheme(
-    primary = Color(0xFF0076FF),
-    secondary = Color(0xFF42A5F5),
+    primary = Color(0xFF0062D6),   // was 0076FF — was borderline 4.2:1; now 5.6:1 AA ✓
+    secondary = Color(0xFF1565C0), // was 42A5F5 — that failed at 2.6:1; now 5.7:1 AA ✓
     background = MinimalBg,
     surface = Color(0xFFFFFFFF),
     onPrimary = Color.White,
@@ -127,7 +127,7 @@ fun HoneyJarTheme(
             accent = Color(0xFFFFB300),
             accentGlow = Color(0xFFFFB300).copy(alpha = 0.3f),
             heroGradient = Brush.radialGradient(listOf(Color(0xFFFFB300), Color(0xFFA64D00))),
-            glassBorder = Color.White.copy(alpha = 0.1f),
+            glassBorder = Color.White.copy(alpha = 0.15f),   // was 10% — slightly more card definition
             textPrimary = Color.White,
             textSecondary = Color(0xFFA0A0A0),
             itemBg = Color.White.copy(alpha = 0.08f),
@@ -140,51 +140,51 @@ fun HoneyJarTheme(
             )
         )
         HoneyJarThemeType.Midnight -> HoneyJarColors(
-            accent = Color(0xFF7C4DFF),
-            accentGlow = Color(0xFF7C4DFF).copy(alpha = 0.3f),
-            heroGradient = Brush.radialGradient(listOf(Color(0xFF7C4DFF), Color(0xFF311B92))),
-            glassBorder = Color(0xFF7C4DFF).copy(alpha = 0.1f),
+            accent = Color(0xFFA57EFF),
+            accentGlow = Color(0xFFA57EFF).copy(alpha = 0.3f),
+            heroGradient = Brush.radialGradient(listOf(Color(0xFFA57EFF), Color(0xFF6B3FA0))),
+            glassBorder = Color.White.copy(alpha = 0.12f),   // was purple 10% — near invisible; white is cleaner on dark
             textPrimary = Color.White,
             textSecondary = Color(0xFF9DA3AF),
-            itemBg = Color(0xFF7C4DFF).copy(alpha = 0.12f),
+            itemBg = Color.White.copy(alpha = 0.06f),        // was purple 12% — too heavy; neutral white tint
             heatmapRamp = listOf(
-                Color(0xFF7C4DFF).copy(alpha = 0.10f),
-                Color(0xFF7C4DFF).copy(alpha = 0.25f),
-                Color(0xFF7C4DFF).copy(alpha = 0.50f),
-                Color(0xFF7C4DFF).copy(alpha = 0.78f),
-                Color(0xFF7C4DFF)
+                Color(0xFFA57EFF).copy(alpha = 0.08f),
+                Color(0xFFA57EFF).copy(alpha = 0.25f),
+                Color(0xFFA57EFF).copy(alpha = 0.52f),
+                Color(0xFFA57EFF).copy(alpha = 0.78f),
+                Color(0xFFA57EFF)
             )
         )
         HoneyJarThemeType.LightCream -> HoneyJarColors(
-            accent = Color(0xFFD49A00),
-            accentGlow = Color(0xFFD49A00).copy(alpha = 0.1f),
+            accent = Color(0xFF8B6700),
+            accentGlow = Color(0xFF8B6700).copy(alpha = 0.12f),
             heroGradient = Brush.radialGradient(listOf(Color(0xFFFFF5E6), Color(0xFFFEF0D7))),
-            glassBorder = Color.Black.copy(alpha = 0.05f),
+            glassBorder = Color.Black.copy(alpha = 0.07f),   // was 5% — slightly more card definition
             textPrimary = Color(0xFF1A1A1A),
             textSecondary = Color(0xFF6B635A),
-            itemBg = Color(0xFFF5F0E8),
+            itemBg = Color(0xFFF5F2EC),                      // slightly lighter than EEE8DC to pass AA for primary on cards
             heatmapRamp = listOf(
-                Color(0xFFEDE8DF),
-                Color(0xFFFFE082),
-                Color(0xFFFFCA28),
-                Color(0xFFD49A00),
-                Color(0xFFA67C00)
+                Color(0xFFE8E0D0),
+                Color(0xFFD4A800).copy(alpha = 0.35f),
+                Color(0xFFBF9000).copy(alpha = 0.60f),
+                Color(0xFF8B6700).copy(alpha = 0.80f),
+                Color(0xFF8B6700)
             )
         )
         HoneyJarThemeType.LightMinimal -> HoneyJarColors(
-            accent = Color(0xFF0076FF),
-            accentGlow = Color(0xFF0076FF).copy(alpha = 0.1f),
-            heroGradient = Brush.radialGradient(listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB))),
-            glassBorder = Color.Black.copy(alpha = 0.04f),
+            accent = Color(0xFF0062D6),
+            accentGlow = Color(0xFF0062D6).copy(alpha = 0.12f),
+            heroGradient = Brush.radialGradient(listOf(Color(0xFFDCEEFF), Color(0xFFB8D9FF))),  // more visible than before
+            glassBorder = Color.Black.copy(alpha = 0.06f),   // was 4% — slightly more card definition
             textPrimary = Color(0xFF1C1E21),
             textSecondary = Color(0xFF65676B),
-            itemBg = Color(0xFFF0F2F5),
+            itemBg = Color(0xFFEBF0F7),                      // was F0F2F5 — slightly more blue tint to match new primary
             heatmapRamp = listOf(
-                Color(0xFFE8EDF2),
-                Color(0xFFBBDEFB),
-                Color(0xFF64B5F6),
-                Color(0xFF1E88E5),
-                Color(0xFF0076FF)
+                Color(0xFFE0EAF5),
+                Color(0xFF90BAE8),
+                Color(0xFF4D95D8),
+                Color(0xFF0F6FC6),
+                Color(0xFF0062D6)
             )
         )
     }
