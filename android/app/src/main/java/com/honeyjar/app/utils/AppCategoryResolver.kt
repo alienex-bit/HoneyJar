@@ -271,8 +271,8 @@ object AppCategoryResolver {
         try {
             val url = URL("https://play.google.com/store/apps/details?id=$packageName&hl=en_GB")
             val conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14)")
             
             if (conn.responseCode != 200) return@withContext null

@@ -110,7 +110,7 @@ Category string keys (stored in `PriorityGroupEntity.key` and `HoneyNotification
 2. **Substring match** — checks package name and notification text for keywords
 3. **Play Store scrape** — fetches the app's Play Store page if network is available; result is cached in the `app_category_cache` Room table (`AppCategoryEntity`)
 
-**Important:** the Play Store scrape makes an HTTP call with no timeout configured. This runs on `Dispatchers.IO` during notification handling and can block a thread for the OS default TCP timeout (~75 s) under poor network conditions.
+**Important:** the Play Store scrape has **10s timeouts** on connections and reads to prevent blocking the notification handler thread during poor network conditions.
 
 `recategorizeAll()` in `NotificationRepository` re-runs strategy 1 (static only — no network) over all historical notifications in a single transaction. Called from `MainActivity` on startup and exposed via `MainViewModel.recategorizeAll()` for the Settings screen trigger.
 
