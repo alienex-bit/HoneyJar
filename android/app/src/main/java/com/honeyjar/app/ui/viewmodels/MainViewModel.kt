@@ -12,25 +12,40 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.honeyjar.app.data.dao.StatsDao
 import com.honeyjar.app.models.HoneyNotification
+import com.honeyjar.app.utils.GeminiApiService
 import com.honeyjar.app.utils.AppLabelCache
 import com.honeyjar.app.utils.BackupManager
 import com.honeyjar.app.utils.TimeUtils
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class AppGuiltEntry(
     val packageName: String,
     val label: String,
     val count7Days: Int,
-    val streak: Int  // consecutive days ending today with ≥1 notification
+    val streak: Int
 )
 
+/**
+ * A single message in the AI chat, plus optional follow-up action chips.
+ *
+ * [pendingAction] is a machine-readable instruction that the AI screen can
+ * execute on the user's behalf — e.g. snoozing a category or resolving all.
+ * Format: "ACTION:<verb>:<arg>" — kept intentionally simple, no reflection.
+ */
 data class AIChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val text: String,
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val followUpChips: List<String> = emptyList()
+    val followUpChips: List<String> = emptyList(),
+    val pendingAction: String? = null   // e.g. "ACTION:MUTE_CATEGORY:social"
 )
+
+/** Possible states for the AI feature availability banner. */
+enum class AiKeyState { UNKNOWN, MISSING, PRESENT }
 
 class MainViewModel(
     private val application: android.app.Application,
@@ -38,6 +53,9 @@ class MainViewModel(
     private val statsDao: StatsDao,
     private val notificationDao: NotificationDao
 ) : ViewModel() {
+
+    // ── Settings flows ────────────────────────────────────────────────────────
+
     val secondaryAlertsEnabled: StateFlow<Boolean> = SettingsRepository.isSecondaryAlertsEnabled(application)
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -46,6 +64,21 @@ class MainViewModel(
 
     val autoBackupFrequency: StateFlow<String> = SettingsRepository.getAutoBackupFrequency(application)
         .stateIn(viewModelScope, SharingStarted.Eagerly, "off")
+
+    /** Exposed so the AI screen can show a "set API key" banner when empty. */
+    val geminiApiKey: StateFlow<String> = SettingsRepository.getGeminiApiKey(application)
+        .map { it.ifEmpty { com.honeyjar.app.BuildConfig.GEMINI_API_KEY } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    val aiKeyState: StateFlow<AiKeyState> = geminiApiKey.map { key ->
+        when {
+            key.isBlank() -> AiKeyState.MISSING
+            else          -> AiKeyState.PRESENT
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AiKeyState.UNKNOWN)
+
+    // ── Notification flows ────────────────────────────────────────────────────
+
     val notifications: StateFlow<List<HoneyNotification>> =
         NotificationRepository.notifications
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -64,15 +97,14 @@ class MainViewModel(
         groups.filter { it.isEnabled }.associate { it.key to it.colour }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    // Ticker flow to periodically re-evaluate time-sensitive counts (snooze expiry)
+    // Ticker for time-sensitive snooze counts
     private val tickerFlow: Flow<Long> = flow {
         while (true) {
             emit(System.currentTimeMillis())
-            kotlinx.coroutines.delay(30_000L) // Refresh every 30 seconds
+            kotlinx.coroutines.delay(30_000L)
         }
     }
 
-    // Derived from Home flow (Unread + 24h) for high-performance Home screen counters
     val activeCount: StateFlow<Int> = combine(notificationsHome, tickerFlow) { list, now ->
         list.count { n -> !n.isResolved && n.snoozeUntil <= now }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -81,9 +113,8 @@ class MainViewModel(
         list.count { n -> !n.isResolved && n.snoozeUntil > now }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    // Global stats derived with a debounce to prevent O(N) lag on every new notification
     private val notificationsDebounced = NotificationRepository.notifications
-        .debounce(1000L) // Aggregate bursts (e.g. during a restore or flood)
+        .debounce(1000L)
 
     val totalCount = notificationsDebounced.map { it.size }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -91,7 +122,6 @@ class MainViewModel(
     val actionedCount = notificationsDebounced.map { it.count { n -> n.isResolved } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    // Bar chart: count per day for the last 7 days
     val barChartData: StateFlow<List<Int>> = notificationsDebounced.map { all ->
         val todayStart = TimeUtils.getDayStart(System.currentTimeMillis())
         val dayMs = 86_400_000L
@@ -101,8 +131,6 @@ class MainViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, List(7) { 0 })
 
-    // This week vs previous week totals for trend display
-    // weeklyCount derived from barChartData so it's always consistent with the bar chart
     val weeklyCount: StateFlow<Int> = barChartData.map { bars -> bars.sum() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
@@ -113,12 +141,10 @@ class MainViewModel(
         all.count { it.postTime >= twoWeeksAgo && it.postTime < weekAgo }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    // Category breakdown: count per category key
     val categoryBreakdown: StateFlow<Map<String, Int>> = notificationsDebounced.map { all ->
         all.groupBy { it.priority.lowercase() }.mapValues { it.value.size }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    // Heatmap: [dayOfWeek 0=Mon][hourBucket 0-7] counts (3-hour buckets)
     val heatmapData: StateFlow<Array<IntArray>> = notificationsDebounced.map { all ->
         val data = Array(7) { IntArray(8) { 0 } }
         val cal = Calendar.getInstance()
@@ -131,31 +157,23 @@ class MainViewModel(
         data
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Array(7) { IntArray(8) { 0 } })
 
-    // App Guilt Score: top 10 noisiest apps over the last 7 days with consecutive-day streaks
     val appBreakdown: StateFlow<List<AppGuiltEntry>> = notificationsDebounced.map { all ->
         val dayMs = 86_400_000L
         val todayStart = TimeUtils.getDayStart(System.currentTimeMillis())
         val weekAgo = todayStart - 6 * dayMs
-        
-        // Fast-lookup set for O(1) streak checks: packageName to dayStart
         val historySet = all.map { it.packageName to TimeUtils.getDayStart(it.postTime) }.toSet()
-        
         val recent = all.filter { it.postTime >= weekAgo }
         recent.groupBy { it.packageName }
             .map { (pkg, notifs) ->
-                val count = notifs.size
                 var streak = 0
-                // Scan back up to a year for consecutive day streaks
                 for (daysAgo in 0..365) {
                     val dayStart = todayStart - daysAgo * dayMs
-                    if (historySet.contains(pkg to dayStart)) {
-                        streak++
-                    } else break
+                    if (historySet.contains(pkg to dayStart)) streak++ else break
                 }
                 AppGuiltEntry(
                     packageName = pkg,
                     label = AppLabelCache.get(pkg, application),
-                    count7Days = count,
+                    count7Days = notifs.size,
                     streak = streak
                 )
             }
@@ -163,7 +181,6 @@ class MainViewModel(
             .take(10)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    // Response time stat (O(N) moved out of UI)
     val avgResponseMinutes: StateFlow<Long?> = notificationsDebounced.map { all ->
         all.filter { it.isResolved && it.resolvedAt > 0 && it.resolvedAt > it.postTime }
             .takeIf { it.isNotEmpty() }
@@ -172,11 +189,13 @@ class MainViewModel(
             ?.toLong()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    // ── AI Chat state ─────────────────────────────────────────────────────────
+
     private val _aiMessages = MutableStateFlow<List<AIChatMessage>>(listOf(
         AIChatMessage(
-            text = "Hello! I'm your HoneyJar Assistant. How can I help you manage your focus today?", 
-            isUser = false, 
-            followUpChips = listOf("What did I miss?", "What's urgent?", "Summarise today")
+            text = "Hello! I'm your HoneyJar AI. I have full access to your notification history and can help you manage focus, spot patterns, or take actions on your behalf.",
+            isUser = false,
+            followUpChips = listOf("What did I miss?", "What's urgent?", "Summarise today", "Which app distracts me most?")
         )
     ))
     val aiMessages: StateFlow<List<AIChatMessage>> = _aiMessages.asStateFlow()
@@ -184,67 +203,278 @@ class MainViewModel(
     private val _isAIBusy = MutableStateFlow(false)
     val isAIBusy: StateFlow<Boolean> = _isAIBusy.asStateFlow()
 
+    /**
+     * Conversation history sent to the API each turn (user + assistant alternating).
+     * Does NOT include the initial greeting (that's UI-only).
+     */
+    private val apiHistory = mutableListOf<GeminiApiService.Message>()
+
+    // ── AI: send prompt ───────────────────────────────────────────────────────
+
     fun sendAIPrompt(prompt: String) {
         viewModelScope.launch {
+            val apiKey = geminiApiKey.value
+            if (apiKey.isBlank()) {
+                _aiMessages.value += AIChatMessage(
+                    text = "No API key set. Please add your Google Gemini API key in Settings → AI Assistant.",
+                    isUser = false
+                )
+                return@launch
+            }
+
             _aiMessages.value += AIChatMessage(text = prompt, isUser = true)
             _isAIBusy.value = true
-            
-            // Artificial delay to simulate "thinking"
-            kotlinx.coroutines.delay(1000)
-            
-            // Gather real data context pulse! pulse! pulse! pulse (truncated)
-            val allNotifs = notificationDao.getAllNotificationsOnce()
-            val now = System.currentTimeMillis()
-            val last4h = allNotifs.filter { it.postTime >= (now - 4 * 3600_000L) }
-            val urgentCount = last4h.count { it.priority.lowercase() == "urgent" && !it.isResolved }
-            val categories = last4h.groupBy { it.priority.lowercase() }.mapValues { it.value.size }
-            val topCategory = categories.maxByOrNull { it.value }?.key ?: "none"
-            
-            val response = when {
-                prompt.contains("missed", ignoreCase = true) || prompt.contains("summary", ignoreCase = true) -> {
-                    val summary = if (last4h.isEmpty()) {
-                        "Your notification honey jar is empty for the last 4 hours. It's been very quiet!"
-                    } else {
-                        "In the last 4 hours, you've received ${last4h.size} notifications. " +
-                        (if (topCategory != "none") "Most are from '$topCategory' (${categories[topCategory]}). " else "") +
-                        (if (urgentCount > 0) "Critically, $urgentCount 'Urgent' alerts need your attention." else "Nothing urgent was missed.")
-                    }
-                    AIChatMessage(text = summary, isUser = false, followUpChips = listOf("Show urgent", "Mute $topCategory", "Details"))
+
+            try {
+                val systemPrompt = buildSystemPrompt()
+                apiHistory.add(GeminiApiService.Message("user", prompt))
+
+                val result = GeminiApiService.sendMessage(apiKey, systemPrompt, apiHistory.toList())
+
+                result.onSuccess { reply ->
+                    apiHistory.add(GeminiApiService.Message("model", reply))
+
+                    // Parse any action tags the model may have returned
+                    val (cleanText, action) = extractAction(reply)
+                    val chips = suggestFollowUpChips(reply, prompt)
+
+                    _aiMessages.value += AIChatMessage(
+                        text = cleanText,
+                        isUser = false,
+                        followUpChips = chips,
+                        pendingAction = action
+                    )
+
+                    // Auto-execute safe read-only actions; prompt user for destructive ones
+                    action?.let { executeActionIfSafe(it) }
+
+                }.onFailure { error ->
+                    // Don't add the failed user turn to history
+                    apiHistory.removeLastOrNull()
+                    _aiMessages.value += AIChatMessage(
+                        text = "Sorry, I couldn't reach the AI right now. ${friendlyError(error.message)}",
+                        isUser = false,
+                        followUpChips = listOf("Try again")
+                    )
                 }
-                prompt.contains("urgent", ignoreCase = true) -> {
-                    if (urgentCount > 0) {
-                        AIChatMessage(text = "You have $urgentCount urgent alerts waiting. I recommend checking those first to clear your mind.", isUser = false, followUpChips = listOf("Show Urgent", "Clear All"))
-                    } else {
-                        AIChatMessage(text = "Great news: You have 0 urgent notifications right now. Everything else is low priority.", isUser = false, followUpChips = listOf("Summarise morning", "Focus advice"))
-                    }
-                }
-                prompt.contains("distract", ignoreCase = true) || prompt.contains("interrupted", ignoreCase = true) -> {
-                    val noisiest = last4h.groupBy { it.packageName }.maxByOrNull { it.value.size }
-                    if (noisiest != null) {
-                        val label = AppLabelCache.get(noisiest.key, application)
-                        AIChatMessage(text = "$label has sent ${noisiest.value.size} pings in the last 4 hours. This is your most disruptive app recently.", isUser = false, followUpChips = listOf("Mute $label", "Ignore Category"))
-                    } else {
-                        AIChatMessage(text = "No apps have been particularly noisy lately. You're doing great at maintaining focus!", isUser = false, followUpChips = listOf("Show patterns", "Zen score"))
-                    }
-                }
-                else -> AIChatMessage(
-                    text = "I've analyzed your notification history. You've actioned ${allNotifs.count { it.isResolved }} notifications so far. Most of your time is spent in '${allNotifs.groupBy { it.priority }.maxByOrNull { it.value.size }?.key ?: "Unknown"}' types.",
-                    isUser = false,
-                    followUpChips = listOf("Summarise today", "Best focus advice")
-                )
+
+            } finally {
+                _isAIBusy.value = false
             }
-            
-            _aiMessages.value += response
-            _isAIBusy.value = false
         }
     }
 
-    fun updatePriorityColour(key: String, hexColor: String) {
+    // ── AI: clear conversation ────────────────────────────────────────────────
+
+    fun clearAiConversation() {
+        apiHistory.clear()
+        _aiMessages.value = listOf(
+            AIChatMessage(
+                text = "Conversation cleared. How can I help?",
+                isUser = false,
+                followUpChips = listOf("What did I miss?", "Today's summary", "Distraction report")
+            )
+        )
+    }
+
+    // ── AI: execute action chips ──────────────────────────────────────────────
+
+    /**
+     * Called when the user taps a [pendingAction] chip in the UI.
+     * Destructive actions (resolve all, mute category) are only executed
+     * when explicitly confirmed via a chip tap — never automatically.
+     */
+    fun executeAction(action: String) {
         viewModelScope.launch {
-            repository.updateColour(key, hexColor)
+            when {
+                action.startsWith("ACTION:MUTE_CATEGORY:") -> {
+                    val category = action.removePrefix("ACTION:MUTE_CATEGORY:")
+                    muteCategory(category, 60 * 60 * 1000L) // 1 hour
+                    _aiMessages.value += AIChatMessage(
+                        text = "Done — $category notifications muted for 1 hour.",
+                        isUser = false
+                    )
+                }
+                action.startsWith("ACTION:RESOLVE_ALL:") -> {
+                    val category = action.removePrefix("ACTION:RESOLVE_ALL:")
+                    val all = notificationDao.getAllNotificationsOnce()
+                    val toResolve = if (category == "*") all else all.filter { it.priority == category }
+                    toResolve.filter { !it.isResolved }.forEach {
+                        NotificationRepository.resolveNotification(it.id)
+                    }
+                    _aiMessages.value += AIChatMessage(
+                        text = "Marked ${toResolve.size} notifications as resolved.",
+                        isUser = false
+                    )
+                }
+                action.startsWith("ACTION:SNOOZE_CATEGORY:") -> {
+                    val parts = action.removePrefix("ACTION:SNOOZE_CATEGORY:").split(":")
+                    val category = parts.getOrNull(0) ?: return@launch
+                    val durationMs = parts.getOrNull(1)?.toLongOrNull() ?: 3_600_000L
+                    val all = notificationDao.getAllNotificationsOnce()
+                    all.filter { it.priority == category && !it.isResolved }.forEach {
+                        NotificationRepository.snoozeNotification(it.id, durationMs)
+                    }
+                    val mins = durationMs / 60_000
+                    _aiMessages.value += AIChatMessage(
+                        text = "Snoozed all $category notifications for $mins minutes.",
+                        isUser = false
+                    )
+                }
+                else -> android.util.Log.w("HoneyJar-AI", "Unknown action: $action")
+            }
         }
     }
-    
+
+    /** Safe read-only actions execute immediately without waiting for chip tap. */
+    private fun executeActionIfSafe(action: String) {
+        // Currently no auto-executed actions — all require explicit user confirmation via chip.
+        // This hook exists for future read-only actions (e.g. navigate to History filtered view).
+    }
+
+    // ── AI: system prompt builder ─────────────────────────────────────────────
+
+    /**
+     * Builds a rich system prompt injecting the user's real notification data.
+     * Sent fresh on every turn so the model always has up-to-date counts.
+     */
+    private suspend fun buildSystemPrompt(): String {
+        val now = System.currentTimeMillis()
+        val df = SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault())
+        val all = notificationDao.getAllNotificationsOnce()
+
+        val todayStart = TimeUtils.getDayStart(now)
+        val today = all.filter { it.postTime >= todayStart }
+        val last4h = all.filter { it.postTime >= now - 4 * 3_600_000L }
+        val unresolved = today.filter { !it.isResolved && it.snoozeUntil <= now }
+        val snoozed = today.filter { !it.isResolved && it.snoozeUntil > now }
+
+        val categoryBreakdown = today.groupBy { it.priority }
+            .entries.sortedByDescending { it.value.size }
+            .joinToString("\n") { (cat, items) ->
+                val unresolvedInCat = items.count { !it.isResolved }
+                "  - ${cat.replaceFirstChar { it.uppercase() }}: ${items.size} total, $unresolvedInCat unresolved"
+            }
+
+        val noisiest7Days = appBreakdown.value.take(3)
+            .joinToString(", ") { "${it.label} (${it.count7Days})" }
+
+        val urgentItems = unresolved.filter { it.priority == "urgent" }
+            .take(5)
+            .joinToString("\n") { "  • ${it.title} — ${it.text.take(60)}" }
+            .ifEmpty { "  None" }
+
+        val recentItems = last4h.take(8)
+            .joinToString("\n") { n ->
+                val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(n.postTime))
+                val status = if (n.isResolved) "✓" else "●"
+                "  $status [$time] ${n.priority.uppercase()}: ${n.title} — ${n.text.take(50)}"
+            }
+            .ifEmpty { "  None" }
+
+        val avgResponse = avgResponseMinutes.value
+        val responseStr = if (avgResponse != null) "${avgResponse}m avg response time" else "no response data yet"
+
+        val categories = allPriorityGroups.value
+            .filter { it.isEnabled }
+            .joinToString(", ") { it.key }
+
+        return """
+You are HoneyJar AI, a smart, concise notification management assistant built into the HoneyJar app.
+Current time: ${df.format(Date(now))}
+
+## User's notification data
+- Today total: ${today.size} notifications (${unresolved.size} unresolved, ${snoozed.size} snoozed)
+- Last 4 hours: ${last4h.size} notifications
+- This week: ${weeklyCount.value} (vs ${prevWeekCount.value} last week)
+- $responseStr
+
+## Today by category:
+$categoryBreakdown
+
+## Urgent unresolved:
+$urgentItems
+
+## Recent activity (last 4h):
+$recentItems
+
+## Noisiest apps this week: $noisiest7Days
+## Active categories: $categories
+
+## Your capabilities
+You can perform actions by including ONE of these tags at the END of your reply, only when appropriate:
+- [ACTION:MUTE_CATEGORY:<key>] — mutes a category for 1 hour
+- [ACTION:RESOLVE_ALL:<key>] — marks all notifications in a category as resolved (* for all)
+- [ACTION:SNOOZE_CATEGORY:<key>:<durationMs>] — snoozes a category (e.g. 3600000 = 1h)
+
+## Instructions
+- Be direct and concise — 2–4 sentences max unless asked for detail.
+- Use specific numbers from the data above, not vague language.
+- Suggest 2–3 relevant follow-up questions at the end of your reply as a plain bulleted list prefixed with "Suggestions:".
+- Only suggest an action tag when the user has clearly requested it.
+- Never make up notification data — use only what's provided above.
+- If the data shows nothing interesting, say so honestly.
+        """.trimIndent()
+    }
+
+    // ── AI: helpers ───────────────────────────────────────────────────────────
+
+    /**
+     * Strips any ACTION tag from the model's reply and returns it separately.
+     * This keeps the displayed text clean while preserving the machine instruction.
+     */
+    private fun extractAction(reply: String): Pair<String, String?> {
+        val actionRegex = Regex("""\[ACTION:[^\]]+\]""")
+        val match = actionRegex.find(reply)
+        val action = match?.value?.removeSurrounding("[", "]")
+        val cleanText = reply.replace(actionRegex, "").trim()
+        return cleanText to action
+    }
+
+    /**
+     * Parses the "Suggestions:" section the model appends and turns them into chips.
+     * Falls back to sensible defaults if the model doesn't include one.
+     */
+    private fun suggestFollowUpChips(reply: String, prompt: String): List<String> {
+        val suggestionsBlock = reply.lines()
+            .dropWhile { !it.startsWith("Suggestions:") }
+            .drop(1)
+            .takeWhile { it.startsWith("-") || it.startsWith("•") || it.startsWith("*") }
+            .map { it.trimStart('-', '•', '*', ' ') }
+            .filter { it.isNotBlank() }
+            .take(3)
+
+        if (suggestionsBlock.isNotEmpty()) return suggestionsBlock
+
+        // Fallback chips based on content keywords
+        return when {
+            "urgent" in reply.lowercase() -> listOf("Show urgent", "Resolve all urgent", "What else?")
+            "mute" in reply.lowercase() || "distract" in reply.lowercase() -> listOf("Mute for 1 hour", "Show distractions", "Focus tips")
+            "summary" in prompt.lowercase() || "today" in prompt.lowercase() -> listOf("What's urgent?", "Which app is noisiest?", "My response time")
+            else -> listOf("Summarise today", "What's urgent?", "Distraction report")
+        }
+    }
+
+    private fun friendlyError(message: String?): String = when {
+        message == null -> "Please check your connection."
+        "401" in message || "authentication" in message.lowercase() -> "Check your API key in Settings."
+        "429" in message -> "Rate limit reached — try again in a moment."
+        "timeout" in message.lowercase() -> "Request timed out — check your connection."
+        else -> "Please try again."
+    }
+
+    // ── API key management ────────────────────────────────────────────────────
+
+    fun saveGeminiApiKey(key: String) {
+        viewModelScope.launch { SettingsRepository.setGeminiApiKey(application, key) }
+    }
+
+    // ── Category / priority group actions ────────────────────────────────────
+
+    fun updatePriorityColour(key: String, hexColor: String) {
+        viewModelScope.launch { repository.updateColour(key, hexColor) }
+    }
+
     fun unmuteCategory(key: String) {
         viewModelScope.launch { repository.unmuteCategory(key) }
     }
@@ -254,21 +484,15 @@ class MainViewModel(
     }
 
     fun updatePriorityEnabled(key: String, isEnabled: Boolean) {
-        viewModelScope.launch {
-            repository.updateEnabled(key, isEnabled)
-        }
+        viewModelScope.launch { repository.updateEnabled(key, isEnabled) }
     }
 
     fun deletePriorityGroup(key: String) {
-        viewModelScope.launch {
-            repository.deleteByKey(key)
-        }
+        viewModelScope.launch { repository.deleteByKey(key) }
     }
-    
+
     fun insertPriorityGroup(group: PriorityGroupEntity) {
-        viewModelScope.launch {
-            repository.insert(group)
-        }
+        viewModelScope.launch { repository.insert(group) }
     }
 
     fun updateSoundUri(key: String, uri: String) {
@@ -295,18 +519,19 @@ class MainViewModel(
         viewModelScope.launch { repository.updateSecondaryAlertDelayMs(key, delayMs) }
     }
 
+    // ── Backup ────────────────────────────────────────────────────────────────
+
     suspend fun buildBackupJson(context: Context): String =
         BackupManager.buildBackupJson(context, statsDao, repository.dao)
 
     suspend fun restoreBackupJson(context: Context, json: String) =
         BackupManager.restoreFromJson(context, json, notificationDao, statsDao, repository.dao)
 
-    /** Re-runs the static categoriser over all historical notifications. Returns (total, updated). */
+    // ── Maintenance ───────────────────────────────────────────────────────────
+
     suspend fun recategorizeAll(): Pair<Int, Int> = NotificationRepository.recategorizeAll()
 
-    /** Resets all built-in category colours to their defaults. Returns count reset. */
     suspend fun resetCategoryColours(): Int = repository.resetCategoryColours()
-
 }
 
 class MainViewModelFactory(

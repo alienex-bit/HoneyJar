@@ -19,6 +19,12 @@ object SettingsRepository {
     private val AUTO_BACKUP_FREQUENCY = stringPreferencesKey("auto_backup_frequency") // "off", "daily", "weekly", "monthly"
     private val LAST_AUTO_BACKUP_TIME = longPreferencesKey("last_auto_backup_time")
     private val SECONDARY_ALERTS_ENABLED = booleanPreferencesKey("secondary_alerts_enabled")
+
+    // ── Gemini API Key ────────────────────────────────────────────────────────
+    // Stored in DataStore (encrypted at rest by the OS on API 23+).
+    // Never hardcoded, never included in backups.
+    private val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
+
     fun isSmartGroupingEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[SMART_GROUPING] ?: true }
     fun isPriorityFilteringEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[PRIORITY_FILTERING] ?: true }
     fun isFocusModeEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[FOCUS_MODE] ?: false }
@@ -28,6 +34,7 @@ object SettingsRepository {
     fun getAutoBackupFrequency(context: Context): Flow<String> = context.dataStore.data.map { it[AUTO_BACKUP_FREQUENCY] ?: "off" }
     fun getLastAutoBackupTime(context: Context): Flow<Long> = context.dataStore.data.map { it[LAST_AUTO_BACKUP_TIME] ?: 0L }
     fun isSecondaryAlertsEnabled(context: Context): Flow<Boolean> = context.dataStore.data.map { it[SECONDARY_ALERTS_ENABLED] ?: true }
+    fun getGeminiApiKey(context: Context): Flow<String> = context.dataStore.data.map { it[GEMINI_API_KEY] ?: "" }
 
     suspend fun setSmartGrouping(context: Context, enabled: Boolean) {
         context.dataStore.edit { it[SMART_GROUPING] = enabled }
@@ -63,5 +70,9 @@ object SettingsRepository {
 
     suspend fun setSecondaryAlertsEnabled(context: Context, enabled: Boolean) {
         context.dataStore.edit { it[SECONDARY_ALERTS_ENABLED] = enabled }
+    }
+
+    suspend fun setGeminiApiKey(context: Context, key: String) {
+        context.dataStore.edit { it[GEMINI_API_KEY] = key.trim() }
     }
 }
