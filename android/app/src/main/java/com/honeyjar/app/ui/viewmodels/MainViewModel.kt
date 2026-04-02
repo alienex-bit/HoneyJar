@@ -64,12 +64,22 @@ class MainViewModel(
         groups.filter { it.isEnabled }.associate { it.key to it.colour }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    // Derived from Home flow (Unread + 24h) for high-performance Home screen counters
-    val activeCount = notificationsHome.map { it.count { n -> !n.isResolved } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    // Ticker flow to periodically re-evaluate time-sensitive counts (snooze expiry)
+    private val tickerFlow: Flow<Long> = flow {
+        while (true) {
+            emit(System.currentTimeMillis())
+            kotlinx.coroutines.delay(30_000L) // Refresh every 30 seconds
+        }
+    }
 
-    val snoozedCount = notificationsHome.map { it.count { n -> !n.isResolved && n.snoozeUntil > System.currentTimeMillis() } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    // Derived from Home flow (Unread + 24h) for high-performance Home screen counters
+    val activeCount: StateFlow<Int> = combine(notificationsHome, tickerFlow) { list, now ->
+        list.count { n -> !n.isResolved && n.snoozeUntil <= now }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val snoozedCount: StateFlow<Int> = combine(notificationsHome, tickerFlow) { list, now ->
+        list.count { n -> !n.isResolved && n.snoozeUntil > now }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     // Global stats derived with a debounce to prevent O(N) lag on every new notification
     private val notificationsDebounced = NotificationRepository.notifications
