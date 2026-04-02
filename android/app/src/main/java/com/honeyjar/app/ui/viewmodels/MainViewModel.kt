@@ -136,14 +136,19 @@ class MainViewModel(
         val dayMs = 86_400_000L
         val todayStart = TimeUtils.getDayStart(System.currentTimeMillis())
         val weekAgo = todayStart - 6 * dayMs
+        
+        // Fast-lookup set for O(1) streak checks: packageName to dayStart
+        val historySet = all.map { it.packageName to TimeUtils.getDayStart(it.postTime) }.toSet()
+        
         val recent = all.filter { it.postTime >= weekAgo }
         recent.groupBy { it.packageName }
             .map { (pkg, notifs) ->
                 val count = notifs.size
                 var streak = 0
+                // Scan back up to a year for consecutive day streaks
                 for (daysAgo in 0..365) {
                     val dayStart = todayStart - daysAgo * dayMs
-                    if (all.any { it.packageName == pkg && it.postTime >= dayStart && it.postTime < dayStart + dayMs }) {
+                    if (historySet.contains(pkg to dayStart)) {
                         streak++
                     } else break
                 }

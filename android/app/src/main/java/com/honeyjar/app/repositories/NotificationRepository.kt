@@ -32,7 +32,7 @@ object NotificationRepository {
     private var repositoryJob = SupervisorJob()
     private var scope = CoroutineScope(Dispatchers.IO + repositoryJob)
 
-    fun initialize(notificationDao: NotificationDao, statsDao: StatsDao, context: Context) {
+    fun initialize(notificationDao: NotificationDao, statsDao: StatsDao) {
         // If the repository was previously shut down, recreate the scope
         if (!repositoryJob.isActive) {
             repositoryJob = SupervisorJob()
@@ -41,7 +41,7 @@ object NotificationRepository {
         
         this.dao = notificationDao
         this.statsDao = statsDao
-        this.encryptor = HoneyEncryptor(context)
+        this.encryptor = HoneyEncryptor()
         this.daoFlow.value = notificationDao
     }
 

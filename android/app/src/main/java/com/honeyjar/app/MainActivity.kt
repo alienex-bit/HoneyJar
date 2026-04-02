@@ -51,7 +51,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemePrefs.initialize(this)
-        NotificationRepository.initialize(database.notificationDao(), database.statsDao(), applicationContext)
+        NotificationRepository.initialize(database.notificationDao(), database.statsDao())
 
         // Pre-warm caches and ensure history categories are up to date with new schema.
         val appContext = applicationContext

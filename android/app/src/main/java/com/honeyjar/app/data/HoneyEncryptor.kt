@@ -9,7 +9,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-class HoneyEncryptor(context: Context) {
+class HoneyEncryptor() {
 
     private val keystore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     private val keyAlias = "HoneyJarMainKey"
