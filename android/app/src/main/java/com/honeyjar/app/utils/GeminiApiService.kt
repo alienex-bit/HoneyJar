@@ -88,13 +88,13 @@ object GeminiApiService {
     private fun buildRequestBody(systemPrompt: String, history: List<Message>): String {
         val root = JSONObject()
 
-        // System Instruction (REST API often uses snake_case: system_instruction)
+        // System Instruction (Canonical REST API: systemInstruction)
         if (systemPrompt.isNotBlank()) {
             val systemInstruction = JSONObject()
             val parts = JSONArray()
             parts.put(JSONObject().put("text", systemPrompt))
             systemInstruction.put("parts", parts)
-            root.put("system_instruction", systemInstruction)
+            root.put("systemInstruction", systemInstruction)
         }
 
         // Contents (History)
@@ -109,11 +109,11 @@ object GeminiApiService {
         }
         root.put("contents", contents)
 
-        // Generation Config (REST API: generation_config)
+        // Generation Config (Canonical REST API: generationConfig)
         val config = JSONObject()
-        config.put("max_output_tokens", 1024)
+        config.put("maxOutputTokens", 1024)
         config.put("temperature", 0.7)
-        root.put("generation_config", config)
+        root.put("generationConfig", config)
 
         return root.toString()
     }

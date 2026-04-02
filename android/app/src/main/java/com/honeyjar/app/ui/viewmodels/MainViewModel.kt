@@ -460,7 +460,7 @@ You can perform actions by including ONE of these tags at the END of your reply,
         "401" in message || "authentication" in message.lowercase() -> "Check your API key in Settings."
         "429" in message -> "Rate limit reached — try again in a moment."
         "timeout" in message.lowercase() -> "Request timed out — check your connection."
-        else -> "Please try again."
+        else -> message.take(100) // Return the first 100 chars of the actual error
     }
 
     // ── API key management ────────────────────────────────────────────────────
