@@ -55,6 +55,10 @@ abstract class HoneyJarDatabase : RoomDatabase() {
                         VALUES ('$key', '$label', '$colour', 1, ${14 + i},
                                 'off', 'off', 1, 300000, 1800000)
                     """.trimIndent())
+                    // Fix: Explicitly re-enable the group. For upgrading users coming from 8->9,
+                    // 'updates' was previously disabled (isEnabled = 0). Since INSERT OR IGNORE 
+                    // skips existing rows, we must force the update to bring it back.
+                    db.execSQL("UPDATE priority_groups SET isEnabled = 1 WHERE key = '$key'")
                 }
                 // Retire the old catch-all device group
                 db.execSQL("UPDATE priority_groups SET isEnabled = 0 WHERE key = 'device'")
